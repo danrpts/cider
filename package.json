@@ -1,0 +1,33 @@
+{
+  "name": "cider",
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db": "mongod --fork --dbpath=./data --logpath /dev/null",
+    "start":
+      "(npm run db) && node node_modules/nodemon/bin/nodemon.js --config package.json",
+    "killdb": "kill $(ps -e | grep '[m]ongod' | awk '{ print $1 }')"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "express-session": "^1.15.6",
+    "mongodb": "^3.0.2",
+    "mongoose": "^5.0.6"
+  },
+  "devDependencies": {
+    "morgan": "^1.9.0",
+    "nodemon": "^1.15.0"
+  },
+  "nodemonConfig": {
+    "restartable": "rs",
+    "ignore": [".git", "node_modules/**/node_modules", "data/"],
+    "verbose": true,
+    "watch": ["index.js", "public/"],
+    "ext": "js html"
+  }
+}
