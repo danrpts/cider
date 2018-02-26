@@ -1,0 +1,11 @@
+- react frontend
+- optimize schemas and handlers
+- allow revote?
+- correct response status
+- use aggregate for bumps, stars, options/votes ?
+- use promises with mongoose
+- validate and sanitize schema inputs
+- split db handlers, schemas into own files (create folder system)
+- use hooks for deletes (delete question and answers); anywhere else?
+- only allow user to respond to question once
+- post types: discussion, question, poll

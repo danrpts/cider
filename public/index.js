@@ -26,346 +26,402 @@ function timeSince(date) {
   return Math.floor(seconds) + " seconds";
 }
 
+// Helpers
+function isPoll(question) {
+  return (
+    question.answers &&
+    question.answers.length > 0 &&
+    question.answers.reduce(
+      (bool, answer) => bool && answer.author === question.author,
+      true
+    )
+  );
+}
 function appendAlert(msg) {
   var $el = $(`<li style="width: 100%; border:">${msg}</li>`);
-  $el.appendTo("#app-alerts");
+  $el.appendTo("#alerts");
   setTimeout(function() {
     $el.remove();
   }, 2000);
 }
-function userPostListHelper(where = "body", list = []) {
-  if (list.length === 0) {
-    $(where).append("¯\\_(ツ)_/¯");
-  } else {
-    list.forEach(function(post, i) {
-      $(where).append(
-        `
-          <tr style="margin-bottom: 5px;">
-            <td style="text-align: center;">
-              ${i + 1}.
-            </td>
-            <td style="padding: 0px; padding-left: 5px;">
-              <span>
-              <a href="" id="show-post-link" data-id="${post._id}">${
-          post.title
-        }</a>
-              </span>
-              </br>
-              <small>
-                ${timeSince(Date.parse(post.created))} ago | ${
-          post.meta.voters.length
-        } votes | ${post.meta.stars.length} stars | ${
-          post.meta.bumps.sum
-        } points
-              </small>
-            </td>
-          </tr>
-          `
-      );
-    });
-  }
-}
-function postListHelper(where = "body", list = []) {
-  if (list.length === 0) {
-    $(where).append("¯\\_(ツ)_/¯");
-  } else {
-    list.forEach(function(post, i) {
-      var perms = {
-        isUser: window.cider && window.cider.user,
-        isOwner: false,
-        hasVoted: false,
-        hasStarred: false,
-        hasBumppedUp: false,
-        hasBumppedDown: false
-      };
-      if (perms.isUser) {
-        let user = window.cider.user;
-        perms.isOwner = post.author._id === user._id;
-        perms.hasVoted = post.meta.voters.indexOf(user._id) > -1;
-        perms.hasStarred = post.meta.stars.indexOf(user._id) > -1;
-        perms.hasBumppedUp = post.meta.bumps.up.indexOf(user._id) > -1;
-        perms.hasBumppedDown = post.meta.bumps.down.indexOf(user._id) > -1;
-      }
-      $(where).append(`
+function appendQuestionHeader(where = "body", question = undefined) {
+  $(where).append(`
+    <table border="1" style="width: 100%; margin-bottom: 5px;">
+      <tbody>
         <tr>
-          <td style="text-align: center;">
-            <a href="" id="do-bump-up-post-link" data-id="${
-              post._id
+          <td style="padding: 10px; text-align: center;">
+            <a href="" id="do-bump-up-question" data-id="${
+              question._id
             }" style="text-decoration: none;">
-              ${perms.hasBumppedUp ? "&#9650;" : "&#9651;"}
+              ${question.me && question.me.bumped > 0 ? "&#9650;" : "&#9651;"}
             </a>
               </br>
-              ${post.meta.bumps.sum}
+              ${question.bumps}
               </br>
-            <a href="" id="do-bump-down-post-link" data-id="${
-              post._id
+            <a href="" id="do-bump-down-question" data-id="${
+              question._id
             }" style="text-decoration: none;">
-              ${perms.hasBumppedDown ? "&#9660;" : "&#9661;"}
+              ${question.me && question.me.bumped < 0 ? "&#9660;" : "&#9661;"}
             </a>
           </td>
-          <td style="padding: 0px; padding-left: 5px;">
-            <span><a href="" id="show-post-link" data-id="${post._id}">
-            ${post.title}
-            </a>
-            </span>
-            </br>
-            <small>
-              by <a id="show-user-link" data-id="${
-                post.author.username
-              }" href="">${post.author.username}</a>
-              ${timeSince(Date.parse(post.created))} ago
-              | ${post.meta.voters.length} votes
-            </small>
+          <td style="padding: 10px;" width="75%">
+            <h3>
+            <a href="" id="show-question" data-id="${question._id}">${
+    question.title
+  }</a>
+            </h3>
+            <p>
+              by <a id="show-user" data-id="${question.author}" href="">${
+    question.author
+  }</a>
+              ${timeSince(Date.parse(question.created))} ago
+              </br>
+              ${
+                question.type === "poll"
+                  ? question.answers.reduce(
+                      (sum, answer) => sum + answer.votes,
+                      0
+                    ) + " votes"
+                  : question.answers.length + " answers"
+              }
+            </p>
           </td>
-          <td style="text-align: center;">
-            <a href="" id="do-star-post-link" data-id="${
-              post._id
+          <td style="padding: 10px; text-align: center;">
+            <a href="" id="do-star-question" data-id="${
+              question._id
             }" style="text-decoration: none;">
-              ${perms.hasStarred ? "&#9733" : "&#9734"}
+              ${question.me && question.me.starred ? "&#9733" : "&#9734"}
             </a>
             </br>
-            ${post.meta.stars.length}
+            ${question.stars}
           </td>
         </tr>
-      `);
+      </tbody>
+    </table>
+  `);
+}
+function listHelper(where = "body", list = []) {
+  if (list.length === 0) {
+    $(where).append(
+      `<p style="text-align: center;">No questions yet</br>¯\\_(ツ)_/¯</br></p>`
+    );
+  } else {
+    list.forEach(function(question) {
+      appendQuestionHeader(where, question);
     });
   }
 }
-function appendUserPostList(where = "body", username) {
-  $(where).append(`
-    <table border="1" style="width: 100%; margin-bottom: 5px;">
-      <tbody id="app-content-post-list-${username}">
-      </tbody>
-    </table>
-  `);
+function appendQuestionListByUser(where = "body", username) {
+  $(where).append(`<div id="app-${username}-question-list"></div>`);
   $.ajax({
-    url: `http://localhost:8080/api/users/${username}/posts`,
+    url: `api/users/${username}/questions`,
     method: "GET"
   })
     .done(function(list) {
-      userPostListHelper(`#app-content-post-list-${username}`, list);
+      listHelper(`#app-${username}-question-list`, list);
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function appendPostList(where = "body", query = "top", limit = 3) {
-  $(where).append(`
-    <table border="1" style="width: 100%; margin-bottom: 5px;">
-      <tbody id="app-content-post-list-${query}">
-      </tbody>
-    </table>
-  `);
+function appendQuestionListByQuery(where = "body", query = "top", limit = 3) {
+  $(where).append(`<div id="app-${query}-question-list"></div>`);
   $.ajax({
-    url: `http://localhost:8080/api/posts/${query}?` + $.param({ limit }),
+    url: `api/questions/${query}?` + $.param({ limit }),
     method: "GET"
   })
     .done(function(list) {
-      postListHelper(`#app-content-post-list-${query}`, list);
+      listHelper(`#app-${query}-question-list`, list);
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function appendPost(where = "body") {}
 
-function showTopPostsList() {
-  $("#app-content").html("<h3>Top</h3>");
-  appendPostList("#app-content", "top", 3);
-}
-function showNewPostsList() {
-  $("#app-content").html("<h3>Recent</h3>");
-  appendPostList("#app-content", "recent", 10);
-}
+// User Views
 function showUser(username) {
-  $("#app-content").html(`<h3>${username}</h3>`);
-  appendUserPostList("#app-content", username);
-}
-function showPost(postId) {
-  $.ajax({
-    url: `http://localhost:8080/api/posts/${postId}`,
-    method: "GET"
-  })
-    .done(function(post) {
-      var totalVotes = post.meta.voters.length;
-      var totalStars = post.meta.stars.length;
-      var perms = {
-        isUser: window.cider && window.cider.user,
-        isOwner: false,
-        hasVoted: false,
-        hasStarred: false,
-        hasBumppedUp: false,
-        hasBumppedDown: false
-      };
-      if (perms.isUser) {
-        let user = window.cider.user;
-        perms.isOwner = post.author._id === user._id;
-        perms.hasVoted = post.meta.voters.indexOf(user._id) > -1;
-        perms.hasStarred = post.meta.stars.indexOf(user._id) > -1;
-        perms.hasBumppedUp = post.meta.bumps.up.indexOf(user._id) > -1;
-        perms.hasBumppedDown = post.meta.bumps.down.indexOf(user._id) > -1;
-      }
-      $("#app-content").html(`<div id="app-content-post"></div>`);
-      var deleteButton = `<button data-id=${
-        post._id
-      } id="do-delete-post-button" type="submit">Delete Post</button>`;
-      var voteButton = `<button data-id=${
-        post._id
-      } id="do-vote-post-button" type="submit">Submit Vote</button>`;
-      var items = post.items.reduce(function(str, item) {
-        var perc = totalVotes > 0 ? item.votes / totalVotes : 0;
-        var fillCount = Math.floor(perc * 50);
-        var bar = perc * 100 + "%&nbsp;" + "/".repeat(fillCount);
-        return (
-          str +
-          `
-          <tr>
-            <td style="text-align: center;">
-              <input type="radio" data-id="${item._id}" id="option-${
-            item._id
-          }" name="vote" style="margin: 0px;">
-            </td>
-            <td style="padding: 0px; padding-left: 5px; padding-top: 10px;">
-              <label for="option-${item._id}">${item.content}</label>
-              ${item.votes} votes
-              </br>
-              ${bar}
-            </td>
-          </tr>
-          `
-        );
-      }, "");
-      $("#app-content-post").html(`
-        <table border="1" style="width: 100%; margin-bottom: 5px;">
-          <tbody>
-            <tr>
-              <td style="text-align: center;">
-                <a href="" id="do-bump-up-post-button" data-id="${
-                  post._id
-                }" style="text-decoration: none;">
-                  ${perms.hasBumppedUp ? "&#9650;" : "&#9651;"}
-                </a>
-                  </br>
-                  ${post.meta.bumps.sum}
-                  </br>
-                <a href="" id="do-bump-down-post-button" data-id="${
-                  post._id
-                }" style="text-decoration: none;">
-                  ${perms.hasBumppedDown ? "&#9660;" : "&#9661;"}
-                </a>
-              </td>
-              <td style="padding: 0px; padding-left: 5px;">
-                <span>
-                ${post.title}
-                </span>
-                </br>
-                <small>
-                  by <a id="show-user-link" data-id="${
-                    post.author.username
-                  }" href="">${post.author.username}</a>
-                  ${timeSince(Date.parse(post.created))} ago
-                </small>
-              </td>
-              <td style="text-align: center;">
-                <a href="" id="do-star-post-link" data-state="${
-                  perms.hasStarred
-                }" data-id="${post._id}" style="text-decoration: none;">
-                  ${perms.hasStarred ? "&#9733" : "&#9734"}
-                </a>
-                </br>
-                ${post.meta.stars.length}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <table style="width: 100%; margin-bottom: 5px;">
-          <tbody>${items}</tbody>
-        </table>
-        <form id="post-form" style="text-align: right;">
-          ${perms.isOwner ? deleteButton : ""}
-          ${
-            !perms.isUser || perms.isOwner
-              ? ""
-              : perms.hasVoted ? "You have voted." : voteButton
-          }
-        </form>
-        `);
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
+  $("#app").html(`<div id="app-user"><fieldset style="border-left-style: none;
+  border-right-style: none;
+  border-bottom-style: none; padding-bottom: 0px;"><legend>${username}</legend></fieldset></div>`);
+  appendQuestionListByUser("#app-user", username);
 }
 function showDashboard() {
   var username = window.cider.user.username;
   $("#app-links-user").html(`
-    Hello, <a id="show-dashboard-link" href="">${username}</a>
+    Hello, <a id="show-dashboard" href="">${username}</a>
     &nbsp;|&nbsp;
-    <a id="do-logout-user-link" href="">Logout</a>
-    `);
-  showUser(username);
-  $("#app-content").append(`
-    <h3>Post</h3>
-    <form id="user-form" style="text-align: center;">
-      <input id="post-title-input" type="text" placeholder="title" style="margin-bottom: 10px;" />
-      <input id="post-option1-input" type="text" placeholder="option 1" style="margin-bottom: 10px;" />
-      <input id="post-option2-input" type="text" placeholder="option 2" style="margin-bottom: 10px;" />
-      </br>
-      <button id="do-create-post-button" type="submit" style="width: 100px;">Create Post</button>
-    </form>
+    <a id="do-logout-user" href="">Logout</a>
+  `);
+
+  $("#app")
+    .html(`<div id="app-dashboard"><fieldset style="border-left-style: none;
+    border-right-style: none;
+    border-bottom-style: none; padding-bottom: 0px;"><legend>Dashboard</legend></fieldset></div>`);
+  appendQuestionListByUser("#app-dashboard", username);
+
+  $("#app-dashboard").append(`
+    <fieldset style="border: 1px solid black; margin-top: 10px;">
+      <legend>Ask</legend>
+      <form id="question-form" style="width: 100%; text-align: left;">
+          <input id="question-title-input" type="text" placeholder="Question" style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
+          <button id="do-crt-question" type="submit" style="float: right;">Submit Question >></button>
+      </form>
+    </fieldset>
+  `);
+
+  $("#app-dashboard").append(`
+    <fieldset style="border: 1px solid black; margin-top: 10px;">
+      <legend>Poll</legend>
+      <form id="poll-form" style="width: 100%; text-align: left;">
+          <input id="poll-title-input" type="text" placeholder="Title" style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
+          <div id="poll-answers">
+            <input data-id="1" id="poll-answer-1-input" type="text" placeholder="Option 1" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
+            <input data-id="2" id="poll-answer-2-input" type="text" placeholder="Option 2" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
+          </div>
+          <a href="" id="append-poll-answer" style="float:left">+ option</a>
+          <button id="do-crt-poll" type="submit" style="float: right;">Submit Poll >></button>
+      </form>
+    </fieldset>
   `);
 }
 function showLoginForm() {
-  $("#app-content").html("<h3>Login</h3>");
-  $("#app-content").append(`
-    <form id="login-form" style="text-align: center;">
-      <input id="username-input" type="text" placeholder="username" style="margin-bottom: 10px;" />
-      <input id="password-input" type="text" placeholder="password" style="margin-bottom: 10px;" />
-      </br>
-      <button id="do-create-user-button"type="button">Register</button>
-      <button id="do-login-user-button" type="submit">Login ></button>
+  $("#app").html(`
+    <form id="login-form" style="width: 100%; text-align: right;">
+      <fieldset style="border: 1px solid black;">
+        <legend>Login</legend>
+        <input id="username-input" type="text" placeholder="username" style="margin-bottom: 10px; display:block; width: 100%; box-sizing: border-box;" />
+        <input id="password-input" type="text" placeholder="password" style="margin-bottom: 10px; display:block; width: 100%; box-sizing: border-box;" />
+        <button id="do-crt-user" type="button">Register</button>
+        <button id="do-login-user" type="submit">Login >></button>
+      </fieldset>
     </form>
   `);
 }
 
-function doStarPost(postId, star) {
+// Question Views
+function showTopQuestionList() {
+  $("#app").html(`<fieldset style="border-left-style: none;
+  border-right-style: none;
+  border-bottom-style: none; padding-bottom: 0px;"><legend>Top</legend></fieldset>`);
+  appendQuestionListByQuery("#app", "top", 3);
+}
+function showRecentQuestionList() {
+  $("#app").html(`<fieldset style="border-left-style: none;
+  border-right-style: none;
+  border-bottom-style: none; padding-bottom: 0px;"><legend>Recent</legend></fieldset>`);
+  appendQuestionListByQuery("#app", "recent", 10);
+}
+function showQuestion(questionId) {
   $.ajax({
-    url: `http://localhost:8080/api/posts/${postId}?star`,
-    method: "PUT"
+    url: `api/questions/${questionId}`,
+    method: "GET"
   })
-    .done(function() {
-      if ($("#app-content-post-list-top").length) {
-        showTopPostsList();
-      } else if ($("#app-content-post-list-new").length) {
-        showNewPostsList();
+    .done(function(question) {
+      $("#app").html(`
+      <div id="app">
+        <fieldset style="
+          border-left-style: none;
+          border-right-style: none;
+          border-bottom-style: none;
+          padding-bottom: 0px;">
+      <legend>${question.type.charAt(0).toUpperCase() +
+        question.type.slice(1)}</legend>
+        </fieldset>
+      </div>
+      `);
+      appendQuestionHeader("#app", question);
+      if (question.type === "poll") {
+        appendPoll("#app", question);
       } else {
-        showPost(postId);
+        appendDiscussion("#app", question);
       }
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function doBumpPost(postId, bump) {
+
+// Question Views
+function appendDiscussion(where = "body", question) {
+  $(where).append(`
+  <div id="app-question">
+
+  <fieldset style="border: 1px solid black;  margin-bottom: 5px;">
+    <legend>Answer</legend>
+
+      <form id="app-question-answer-form" style="text-align: right;">
+
+        <textarea id="answer-input" style="min-width: 100%; width: 100%; margin: 0px;
+      display: block;
+      box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Answer"></textarea>
+          <button data-id=${
+            question._id
+          } id="do-del-question" type="submit">Delete Question</button>
+          <button data-id=${
+            question._id
+          } id="do-crt-answer" type="submit">Submit Answer >></button>
+      </form>
+
+    </fieldset>
+
+    <div id="app-question-answers">
+      <!-- append question answers here -->
+    </div>
+
+  </div>
+  `);
+
+  question.answers.forEach(function(answer, i) {
+    $("#app-question-answers").append(`
+          <table border="1" style="width: 100%; margin-bottom: 5px;">
+            <tbody>
+              <tr>
+                <td style="padding: 10px; text-align: center;">
+                  <a href="" id="do-vote-up-answer" data-question-id="${
+                    question._id
+                  }" data-answer-id="${answer._id}" style="text-decoration: none;">
+                    ${
+                      question.me &&
+                      question.me.voted[answer._id] &&
+                      question.me.voted[answer._id] > 0
+                        ? "&#9650;"
+                        : "&#9651;"
+                    }
+                  </a>
+                    </br>
+                    ${answer.votes}
+                    </br>
+                  <a href="" id="do-vote-down-answer" data-question-id="${
+                    question._id
+                  }" data-answer-id="${answer._id}" style="text-decoration: none;">
+                    ${
+                      question.me &&
+                      question.me.voted[answer._id] &&
+                      question.me.voted[answer._id] < 0
+                        ? "&#9660;"
+                        : "&#9661;"
+                    }
+                  </a>
+                </td>
+                <td style="padding: 10px;" width="75%">
+                  <h3>${answer.content}</h3>
+                  <p>
+                    by <a id="show-user" data-id="${
+                      answer.author
+                    }" href="">${answer.author}</a>
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        `);
+  });
+}
+
+// Poll Views
+function appendPoll(where = "body", question) {
+  $(where).append(`
+
+    <div id="app-poll">
+
+      <fieldset style="border: 1px solid black;">
+        <legend>Vote</legend>
+
+        <div id="app-poll-answers">
+          <!-- append poll answers here -->
+        </div>
+
+        <form id="poll-form" style="text-align: right;">
+          <button data-id=${
+            question._id
+          } id="do-del-question" type="submit">Delete</button>
+          <button data-id=${
+            question._id
+          } id="do-vote-poll" type="submit">Submit Vote >></button>
+        </form>
+
+      </fieldset>
+
+    </div>
+    `);
+
+  var totalVotes = question.answers.reduce(
+    (sum, answer) => sum + answer.votes,
+    0
+  );
+
+  question.answers.forEach(function(answer, i) {
+    var percentage = (totalVotes > 0 ? answer.votes / totalVotes : 0) * 100;
+    //var barGraph = "/".repeat(Math.floor(percentage * 50));
+    $("#app-poll-answers").append(`
+          <table border="1" style="width: 100%; margin-bottom: 5px;">
+            <tbody>
+              <tr>
+                <td style="padding: 10px; text-align: center;">
+                  ${i + 1}.
+                </td>
+                <td style="padding: 10px;" width="75%">
+                  <span>
+                    <label for="app-poll-answers-${i}">${answer.content}</label>
+                  </span>
+                  </br>
+                  <small>
+                     ${answer.votes} votes | ${percentage} %
+                  </small>
+                </td>
+                <td style="padding: 10px; text-align: center;">
+                  <input type="radio" data-id="${
+                    answer._id
+                  }" id="app-poll-answers-${i}" name="vote" style="padding: 0px; margin: 0px;" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        `);
+  });
+}
+
+// Question Actions
+function doCrtAnswer(questionId = "", answer = "") {
   $.ajax({
-    url: `http://localhost:8080/api/posts/${postId}?` + $.param({ bump }),
-    method: "PUT"
+    url: `api/answers`,
+    method: "POST",
+    data: {
+      questionId,
+      content: answer
+    }
   })
     .done(function() {
-      if ($("#app-content-post-list-top").length) {
-        showTopPostsList();
-      } else if ($("#app-content-post-list-new").length) {
-        showNewPostsList();
-      } else {
-        showPost(postId);
-      }
+      showQuestion(questionId);
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function doDeletePost(postId) {
+
+// Question Actions
+function doCrtQuestion(title = "", answers = []) {
+  var data = {
+    title
+  };
+  if (answers.length > 0) {
+    data.answers = answers;
+  }
   $.ajax({
-    url: `http://localhost:8080/api/posts/${postId}`,
+    url: "api/questions",
+    method: "POST",
+    data
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doDelQuestion(questionId = "") {
+  $.ajax({
+    url: `api/questions/${questionId}`,
     method: "DELETE"
   })
     .done(function() {
@@ -375,108 +431,116 @@ function doDeletePost(postId) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function doVotePost(postId, itemId) {
+function doStarQuestion(questionId = "", star = "") {
   $.ajax({
-    url:
-      `http://localhost:8080/api/posts/${postId}/${itemId}?` +
-      $.param({ vote: true }),
+    url: `api/questions/${questionId}?star`,
     method: "PUT"
   })
     .done(function() {
-      showPost(postId);
+      if ($("#app-top-question-list").length) {
+        showTopQuestionList();
+      } else if ($("#app-recent-question-list").length) {
+        showRecentQuestionList();
+      } else if ($("#app-dashboard").length) {
+        showDashboard();
+      } else if ($("#app-user").length) {
+        showUser($("#app-user legend").text());
+      } else {
+        showQuestion(questionId);
+      }
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function doCreatePost() {
-  var flag = 0;
-  if ($("#post-title-input").val() === "") {
-    flag = 1;
-    appendAlert("invalid post title");
-  }
-  if ($("#post-option1-input").val() === "") {
-    flag = 1;
-    appendAlert("invalid post option 1");
-  }
-  if ($("#post-option2-input").val() === "") {
-    flag = 1;
-    appendAlert("invalid post option 2");
-  }
-  if (!flag) {
-    $.ajax({
-      url: "http://localhost:8080/api/posts",
-      method: "POST",
-      data: {
-        title: $("#post-title-input").val(),
-        items: [$("#post-option1-input").val(), $("#post-option2-input").val()]
+function doBumpQuestion(questionId = "", bump = "") {
+  $.ajax({
+    url: `api/questions/${questionId}?` + $.param({ bump }),
+    method: "PUT"
+  })
+    .done(function() {
+      if ($("#app-top-question-list").length) {
+        showTopQuestionList();
+      } else if ($("#app-recent-question-list").length) {
+        showRecentQuestionList();
+      } else if ($("#app-dashboard").length) {
+        showDashboard();
+      } else if ($("#app-user").length) {
+        showUser($("#app-user legend").text());
+      } else {
+        showQuestion(questionId);
       }
     })
-      .done(function() {
-        $("#post-title-input").val("");
-        $("#post-option1-input").val("");
-        $("#post-option2-input").val("");
-        showDashboard();
-      })
-      .fail(function(jqXHR, textStatus, errorThrown) {
-        appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-      });
-  }
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
 }
-function doCreateUser() {
-  var username = $("#username-input").val();
-  var flag = 0;
-  if (username === "") {
-    flag = 1;
-    appendAlert("invalid username");
-  }
-  if (!flag) {
-    $.ajax({
-      url: "http://localhost:8080/api/users",
-      method: "POST",
-      data: {
-        username
-      }
+function doVoteAnswer(questionId = "", answerId = "", vote = "") {
+  $.ajax({
+    url: `api/answers/${answerId}?` + $.param({ vote }),
+    method: "PUT"
+  })
+    .done(function() {
+      showQuestion(questionId);
     })
-      .done(function() {
-        $("#user-input").val("");
-        appendAlert(`Successfully created ${username} account!`);
-      })
-      .fail(function(jqXHR, textStatus, errorThrown) {
-        appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-      });
-  }
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
 }
-function doLoginUser() {
-  var username = $("#username-input").val();
-  var flag = 0;
-  if (username === "") {
-    flag = 1;
-    appendAlert("invalid username");
-  }
-  if (!flag) {
-    $.ajax({
-      url: `http://localhost:8080/api/users/me?` + $.param({ login: username }),
-      method: "PUT"
+function doVotePoll(questionId = "", answerId = "") {
+  $.ajax({
+    url: `api/answers/${answerId}?vote`,
+    method: "PUT",
+    data: {
+      question: questionId
+    }
+  })
+    .done(function() {
+      showQuestion(questionId);
     })
-      .done(function(user) {
-        window.cider = { user };
-        showDashboard();
-      })
-      .fail(function(jqXHR, textStatus, errorThrown) {
-        appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-      });
-  }
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+
+// User Actions
+function doCrtUser(username = "") {
+  $.ajax({
+    url: "api/users",
+    method: "POST",
+    data: {
+      username
+    }
+  })
+    .done(function() {
+      appendAlert(`Successfully created ${username} account!`);
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doLoginUser(username = "") {
+  $.ajax({
+    url: `api/users/me?` + $.param({ login: username }),
+    method: "PUT"
+  })
+    .done(function(user) {
+      window.cider = { user };
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
 }
 function doLogoutUser() {
   $.ajax({
-    url: `http://localhost:8080/api/users/me?logout`,
+    url: `api/users/me?logout`,
     method: "PUT"
   })
     .done(function(user, result) {
       window.cider = undefined;
       $("#app-links-user").html(`
-        <a href="" id="show-login-link">Login</a>
+        <a href="" id="show-login-form">Login</a>
       `);
       appendAlert("Successfully logged out.");
       showLoginForm();
@@ -486,79 +550,186 @@ function doLogoutUser() {
     });
 }
 
-$("body").delegate("#show-top-posts-link", "click", function(e) {
+// Event Handlers
+$("body").delegate("#show-top-question-list", "click", function(e) {
   e.preventDefault();
-  showTopPostsList(e.target.dataset.id);
+  showTopQuestionList(e.target.dataset.id);
 });
-$("body").delegate("#show-new-posts-link", "click", function(e) {
+$("body").delegate("#show-recent-question-list", "click", function(e) {
   e.preventDefault();
-  showNewPostsList(e.target.dataset.id);
+  showRecentQuestionList(e.target.dataset.id);
 });
-$("body").delegate("#show-login-link", "click", function(e) {
+$("body").delegate("#show-login-form", "click", function(e) {
   e.preventDefault();
   showLoginForm(e.target.dataset.id);
 });
-$("body").delegate("#show-dashboard-link", "click", function(e) {
+$("body").delegate("#show-dashboard", "click", function(e) {
   e.preventDefault();
   showDashboard();
 });
-$("body").delegate("#show-user-link", "click", function(e) {
+$("body").delegate("#show-user", "click", function(e) {
   e.preventDefault();
   showUser(e.target.dataset.id);
 });
-$("body").delegate("#show-post-link", "click", function(e) {
+$("body").delegate("#show-question", "click", function(e) {
   e.preventDefault();
-  showPost(e.target.dataset.id);
+  showQuestion(e.target.dataset.id);
 });
-
-$("body").delegate("#do-star-post-link", "click", function(e) {
+$("body").delegate("#append-poll-answer", "click", function(e) {
   e.preventDefault();
-  doStarPost(e.target.dataset.id);
-});
-$("body").delegate("#do-bump-up-post-link", "click", function(e) {
-  e.preventDefault();
-  doBumpPost(e.target.dataset.id, "up");
-});
-$("body").delegate("#do-bump-down-post-link", "click", function(e) {
-  e.preventDefault();
-  doBumpPost(e.target.dataset.id, "down");
-});
-$("body").delegate("#do-delete-post-button", "click", function(e) {
-  e.preventDefault();
-  var id = e.target.dataset.id;
-  doDeletePost(e.target.dataset.id);
-});
-$("body").delegate("#do-vote-post-button", "click", function(e) {
-  e.preventDefault();
-  var $checkedEl = $("input[name=vote]:checked");
-  if (!$checkedEl.length) {
-    appendAlert("no selection");
-  } else {
-    // todo store item id in data
-    doVotePost(e.target.dataset.id, $checkedEl[0].dataset.id);
+  var flag = 0;
+  var answers = $("#poll-answers > input");
+  if (answers.length === 5) {
+    flag = 1;
+    appendAlert("exceeded max answers");
+  }
+  var idxs = [];
+  answers.each(function() {
+    idxs.push(parseInt(this.dataset.id, 10));
+  });
+  idxs.sort();
+  var minIdx = idxs[idxs.length - 1] + 1;
+  // note: findMinIdx has lgn solution with binary search
+  for (var i = 1; i < idxs.length; i++) {
+    if (idxs[i] - idxs[i - 1] > 1) {
+      minIdx = idxs[i - 1] + 1;
+      break;
+    }
+  }
+  if (!flag) {
+    $("#poll-answers").append(`
+      <input data-id="${minIdx}" id="poll-answer-${minIdx}-input" type="text" placeholder="Option ${minIdx}" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
+      <a href="" id="remove-poll-answer-${minIdx}" style="text-decoration: none;">&#10005;</a>
+    `);
+    $("body").delegate(`#remove-poll-answer-${minIdx}`, "click", function(e) {
+      e.preventDefault();
+      $(`#poll-answer-${minIdx}-input`).remove();
+      $("body").undelegate(`#remove-poll-answer-${minIdx}`, "click");
+      $(`#remove-poll-answer-${minIdx}`).remove();
+    });
   }
 });
-$("body").delegate("#do-create-post-button", "click", function(e) {
+
+$("body").delegate("#do-crt-question", "click", function(e) {
   e.preventDefault();
-  doCreatePost();
+  var flag = 0;
+  var title = $("#question-title-input").val();
+  if (!title || title === "") {
+    flag = 1;
+    appendAlert("invalid question title");
+  }
+  if (!flag) {
+    doCrtQuestion(title);
+  }
 });
-$("body").delegate("#do-create-user-button", "click", function(e) {
+$("body").delegate("#do-del-question", "click", function(e) {
   e.preventDefault();
-  doCreateUser();
+  var id = e.target.dataset.id;
+  doDelQuestion(e.target.dataset.id);
 });
-$("body").delegate("#do-login-user-button", "click", function(e) {
+$("body").delegate("#do-bump-up-question", "click", function(e) {
   e.preventDefault();
-  doLoginUser();
+  doBumpQuestion(e.target.dataset.id, "up");
 });
-$("body").delegate("#do-logout-user-link", "click", function(e) {
+$("body").delegate("#do-bump-down-question", "click", function(e) {
+  e.preventDefault();
+  doBumpQuestion(e.target.dataset.id, "down");
+});
+$("body").delegate("#do-star-question", "click", function(e) {
+  e.preventDefault();
+  doStarQuestion(e.target.dataset.id);
+});
+
+$("body").delegate("#do-crt-answer", "click", function(e) {
+  e.preventDefault();
+  var answer = $("#answer-input").val();
+  var flag = 0;
+  if (!answer || answer === "") {
+    flag = 1;
+    appendAlert("invalid answer input");
+  }
+  if (!flag) {
+    doCrtAnswer(e.target.dataset.id, answer);
+    $("input #answer-input").val("");
+  }
+});
+$("body").delegate("#do-vote-up-answer", "click", function(e) {
+  e.preventDefault();
+  doVoteAnswer(e.target.dataset.questionId, e.target.dataset.answerId, "up");
+});
+$("body").delegate("#do-vote-down-answer", "click", function(e) {
+  e.preventDefault();
+  doVoteAnswer(e.target.dataset.questionId, e.target.dataset.answerId, "down");
+});
+
+$("body").delegate("#do-crt-user", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var username = $("#username-input").val();
+  if (username === "") {
+    flag = 1;
+    appendAlert("invalid username");
+  }
+  if (!flag) {
+    doCrtUser(username);
+    $("#username-input").val("");
+  }
+});
+$("body").delegate("#do-login-user", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var username = $("#username-input").val();
+  if (username === "") {
+    flag = 1;
+    appendAlert("invalid username");
+  }
+  if (!flag) {
+    doLoginUser(username);
+    $("#username-input").val("");
+  }
+});
+$("body").delegate("#do-logout-user", "click", function(e) {
   e.preventDefault();
   doLogoutUser();
+});
+
+$("body").delegate("#do-crt-poll", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var title = $("#poll-title-input").val();
+  var answers = [];
+  $("#poll-answers > input").each(function() {
+    if (this.value && this.value != "") answers.push(this.value);
+  });
+  if (!title || title === "") {
+    flag = 1;
+    appendAlert("invalid poll title");
+  }
+  if (answers.length < 2) {
+    flag = 1;
+    appendAlert("minimum two options");
+  }
+  if (!flag) {
+    doCrtQuestion(title, answers);
+  }
+});
+$("body").delegate("#do-vote-poll", "click", function(e) {
+  e.preventDefault();
+  var selected = $("input[name=vote]:checked");
+  var flag = 0;
+  if (!selected.length) {
+    flag = 1;
+    appendAlert("no selection");
+  }
+  if (!flag) {
+    doVotePoll(e.target.dataset.id, selected[0].dataset.id, "up");
+  }
 });
 
 $(function() {
   // try to get the current user with the session cookie
   $.ajax({
-    url: `http://localhost:8080/api/users/me`,
+    url: `api/users/me`,
     method: "GET"
   })
     .done(function(user) {
@@ -567,6 +738,6 @@ $(function() {
       showDashboard();
     })
     .fail(function() {
-      showTopPostsList();
+      showTopQuestionList();
     });
 });

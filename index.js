@@ -1,68 +1,6 @@
-// object database
+// Schemas
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const ItemSchema = new Schema({
-  content: String,
-  votes: {
-    type: Number,
-    default: 0
-  }
-});
-const PostSchema = new Schema({
-  author: {
-    type: Schema.ObjectId,
-    index: true,
-    ref: "User"
-  },
-  title: String,
-  created: {
-    type: Date,
-    default: Date.now
-  },
-  items: [ItemSchema],
-  meta: {
-    bumps: {
-      sum: {
-        type: Number,
-        default: 0
-      },
-      up: [
-        {
-          type: Schema.ObjectId,
-          ref: "User"
-        }
-      ],
-      down: [
-        {
-          type: Schema.ObjectId,
-          ref: "User"
-        }
-      ]
-    },
-    stars: [
-      {
-        type: Schema.ObjectId,
-        ref: "Post"
-      }
-    ],
-    // todo record vote and allow change
-    voters: [
-      {
-        type: Schema.ObjectId,
-        ref: "User"
-      }
-    ]
-  }
-});
-PostSchema.virtual("bumps").get(function() {
-  return this.meta.bumps.up.length - this.meta.bumps.down.length;
-});
-PostSchema.virtual("stars").get(function() {
-  return this.meta.stars.length;
-});
-PostSchema.virtual("votes").get(function() {
-  return this.meta.voters.length;
-});
 const UserSchema = new Schema({
   username: {
     type: String,
@@ -77,8 +15,111 @@ const UserSchema = new Schema({
     default: Date.now
   }
 });
-const PostModel = mongoose.model("Post", PostSchema);
+const AnswerSchema = new Schema({
+  question: {
+    type: Schema.ObjectId,
+    ref: "Question",
+    required: true,
+    index: true
+  },
+  author: {
+    type: Schema.ObjectId,
+    ref: "User",
+    required: true
+  },
+  content: {
+    type: String,
+    required: true
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ["response", "option"]
+  },
+  accepted: Boolean,
+  created: {
+    type: Date,
+    default: Date.now
+  },
+  votes: {
+    sum: {
+      type: Number,
+      default: 0
+    },
+    up: [
+      {
+        type: Schema.ObjectId,
+        ref: "User"
+      }
+    ],
+    down: [
+      {
+        type: Schema.ObjectId,
+        ref: "User"
+      }
+    ]
+  }
+});
+const QuestionSchema = new Schema({
+  author: {
+    type: Schema.ObjectId,
+    ref: "User",
+    required: true
+  },
+  title: {
+    type: String,
+    required: true
+  },
+  details: String,
+  type: {
+    type: String,
+    required: true,
+    enum: ["discussion", "poll"]
+  },
+  accepted: {
+    type: Schema.ObjectId,
+    ref: "Answer"
+  },
+  created: {
+    type: Date,
+    default: Date.now
+  },
+  answers: [
+    {
+      type: Schema.ObjectId,
+      ref: "Answer"
+    }
+  ],
+  bumps: {
+    sum: {
+      type: Number,
+      default: 0
+    },
+    up: [
+      {
+        type: Schema.ObjectId,
+        ref: "User"
+      }
+    ],
+    down: [
+      {
+        type: Schema.ObjectId,
+        ref: "User"
+      }
+    ]
+  },
+  stars: [
+    {
+      type: Schema.ObjectId,
+      ref: "User"
+    }
+  ]
+});
 const UserModel = mongoose.model("User", UserSchema);
+const AnswerModel = mongoose.model("Answer", AnswerSchema);
+const QuestionModel = mongoose.model("Question", QuestionSchema);
+
+// Object Database
 const uri = "mongodb://127.0.0.1:27017";
 const dbServer = mongoose.connect(uri, () => {
   console.log(`Mongoose connected to ${uri}`);
@@ -109,218 +150,59 @@ httpServer.use(sessionMiddleware);
 
 // REST API
 const RESTServer = express.Router();
-RESTServer.route("/posts").post(createPostHandler); // Queries: ?limit=[Integer]
-RESTServer.route("/posts").get((req, res) => {
-  PostModel.find().exec((err, posts) => {
-    res.json(posts);
-  });
-});
-RESTServer.route("/posts/random").get(getRandomPostHandler);
-RESTServer.route("/posts/recent").get(getRecentPostListHandler);
-RESTServer.route("/posts/top").get(getTopPostListHandler);
-RESTServer.route("/posts/:postid").get(getPostHandler);
-RESTServer.route("/posts/:postid").put(putPostHandler); // Queries: ?star, ?bump=(up|down)
-RESTServer.route("/posts/:postid/:itemid").put(putPostItemHandler); // Queries: ?vote=[itemId]
-RESTServer.route("/posts/:postid").delete(deletePostHandler);
+httpServer.use("/api", RESTServer);
 
-RESTServer.route("/users").post(postUserHandler);
-RESTServer.route("/users").get((req, res) => {
+// Temporary/Debug Endpoints
+RESTServer.route("/debug/users").get((req, res) => {
   UserModel.find().exec((err, users) => {
     res.json(users);
   });
 });
+RESTServer.route("/debug/answers").get((req, res) => {
+  AnswerModel.find().exec((err, answers) => {
+    res.json(answers);
+  });
+});
+RESTServer.route("/debug/questions").get((req, res) => {
+  QuestionModel.find().exec((err, questions) => {
+    res.json(questions);
+  });
+});
+
+// User API
+RESTServer.route("/users").post(crtUserHandler);
+RESTServer.route("/users/:username/questions").get(getListByUserHandler);
+
+// Me API
 RESTServer.route("/users/me").get(getMeHandler);
 RESTServer.route("/users/me").put(putMeHandler); // Queries: ?login ?logout
-RESTServer.route("/users/:username").get(getUserHandler);
-RESTServer.route("/users/:username/posts").get(getUserPostListHandler);
-RESTServer.route("/users/:username").delete(delUserHandler);
-httpServer.use("/api", RESTServer);
+RESTServer.route("/users/me").delete(delMeHandler);
 
-// Request Helpers
-function isLoggedIn(req) {
-  return req.session && req.session.user;
-}
+// Answers API
+RESTServer.route("/answers").post(crtAnswerHandler);
+RESTServer.route("/answers/:answerId").put(putAnswerHandler); // Queries: ?vote=(up|down)
+RESTServer.route("/answers/:answerId").delete(() => {}); // todo
 
-// Handlers
-function createPostHandler(req, res) {
-  if (!isLoggedIn(req)) {
-    res.status(401).send("Unauthorized");
-  } else {
-    // todo validate input
-    items = req.body.items.map(content => {
-      return { content };
-    });
-    PostModel.create(
-      { author: req.session.user._id, title: req.body.title, items },
-      (crtErr, post) => {
-        if (crtErr) {
-          res.status(500).send("Internal Error: Create Post");
-        } else {
-          res.status(201).send(post);
-        }
-      }
-    );
-  }
-}
-function getRandomPostHandler(req, res) {
-  // todo does not scale
-  // todo return n=limit random posts
-  //let lim = req.query.limit ? parseInt(req.query.limit, 10) : 1;
-  PostModel.count().exec((countErr, count) => {
-    if (countErr) {
-      res.status(500).send("Internal Error");
-    } else {
-      let randPostIdx = parseInt(Math.random() * count, 10);
-      PostModel.findOne()
-        .skip(randPostIdx)
-        .exec((postErr, post) => {
-          if (postErr) {
-            res.status(500).send("Internal Error");
-          } else if (!post) {
-            res.status(404).send("Not Found: Post");
-          } else {
-            post.author = post.author.username;
-            res.json(post);
-          }
-        });
-    }
-  });
-}
-function getRecentPostListHandler(req, res) {
-  let lim = req.query.limit ? parseInt(req.query.limit, 10) : 10;
-  PostModel.find()
-    .sort("-created")
-    .limit(lim)
-    .populate("author")
-    .exec((findErr, posts) => {
-      if (findErr) {
-        res.status(500).send("Internal Error: Find Posts");
-      } else {
-        res.json(posts);
-      }
-    });
-}
-function getTopPostListHandler(req, res) {
-  let lim = req.query.limit ? parseInt(req.query.limit, 10) : 10;
-  PostModel.find()
-    .sort("-meta.bumps.sum")
-    .limit(lim)
-    .populate("author")
-    .exec((err, posts) => {
-      if (err) {
-        res.status(500).send("Internal Error");
-      } else {
-        res.json(posts);
-      }
-    });
-}
-function getUserPostListHandler(req, res) {
-  // do a user lookup first instead of a populate
-  UserModel.findOne({
-    username: req.params.username
-  }).exec((findErr, user) => {
-    if (findErr) {
-      res.status(500).send("Internal Error: Find Username");
-    } else if (!user) {
-      res.status(404).send("Not Found: User");
-    } else {
-      PostModel.find()
-        .where("author")
-        .equals(user._id)
-        .sort("-created")
-        .exec((postsErr, posts) => {
-          if (postsErr) {
-            res.status(500).send("Internal Error: Find Posts By Username");
-          } else {
-            res.json(posts);
-          }
-        });
-    }
-  });
-}
-function getPostHandler(req, res) {
-  PostModel.findById(req.params.postid)
-    .populate("author")
-    .exec((findErr, post) => {
-      if (findErr) {
-        res.status(500).send("Internal Error");
-      } else {
-        res.json(post);
-      }
-    });
-}
-function putPostHandler(req, res) {
-  if (!isLoggedIn(req)) {
-    res.status(401).send("Unauthorized");
-  } else if (req.query.hasOwnProperty("star")) {
-    toggleStarHelper(req, res);
-  } else if (req.query.bump === "up") {
-    bumpUpHelper(req, res);
-  } else if (req.query.bump === "down") {
-    bumpDownHelper(req, res);
-  } else {
-    res.status(400).send("Bad Request: Invalid Query");
-  }
-}
-function putPostItemHandler(req, res) {
-  if (!isLoggedIn(req)) {
-    res.status(401).send("Unauthorized");
-  } else if (req.query.vote) {
-    PostModel.findById(req.params.postid, (postErr, post) => {
-      let userId = mongoose.Types.ObjectId(req.session.user._id);
-      if (postErr) {
-        res.status(500).send("Internal Error: Find Post");
-      } else if (post.meta.voters.find(voterId => userId.equals(voterId))) {
-        // reject vote more than once
-        res.status(403).send("Forbidden: Vote More Than Once");
-      } else if (
-        //reject vote for own
-        userId.equals(post.author)
-      ) {
-        res.status(403).send("Forbidden: Vote For Own");
-      } else {
-        post.meta.voters.push(userId);
-        post.items.id(req.params.itemid).votes += 1;
-        post.save();
-        res.status(200).send("Voted");
-      }
-    });
-  } else {
-    res.status(400).send("Bad Request: Invalid Query");
-  }
-}
-function deletePostHandler(req, res) {
-  if (!isLoggedIn(req)) {
-    res.status(401).send("Unauthorized");
-  } else {
-    PostModel.findById(req.params.postid, (postErr, post) => {
-      if (postErr) {
-        res.status(500).send("Internal Error");
-      } else if (
-        !mongoose.Types.ObjectId(req.session.user._id).equals(post.author)
-      ) {
-        res.status(403).send("Forbidden: Delete Other User Post");
-      } else {
-        post.remove(removeErr => {
-          if (removeErr) {
-            res.status(500).send("Internal Error");
-          } else {
-            res.json({ msg: "deleted", _id: post.id });
-          }
-        });
-      }
-    });
-  }
-}
+// Other API
+RESTServer.route("/questions/random").get(getRandomQuestionHandler);
+RESTServer.route("/questions/recent").get(getRecentListHandler);
+RESTServer.route("/questions/top").get(getTopListHandler);
 
-function postUserHandler(req, res) {
+// Questions API
+RESTServer.route("/questions").post(crtQuestionHandler);
+RESTServer.route("/questions/:questionId").get(getQuestionHandler);
+RESTServer.route("/questions/:questionId").put(putQuestionHandler); // Queries: ?star, ?bump=(up|down)
+RESTServer.route("/questions/:questionId").delete(delQuestionHandler);
+
+// User API Handlers
+function crtUserHandler(req, res) {
   UserModel.create(
     {
       username: req.body.username
     },
-    (crtErr, user) => {
+    (err, user) => {
       // todo communicate dup username
-      if (crtErr) {
+      if (err) {
         res.status(500).send("Internal Error: Create User");
       } else {
         res.status(201).send(user);
@@ -328,19 +210,70 @@ function postUserHandler(req, res) {
     }
   );
 }
+function getUserHandler(req, res) {
+  UserModel.findOne({
+    username: req.params.username
+  }).exec((err, user) => {
+    if (err) {
+      res.status(500).send("Internal Error: Find User");
+    } else if (!user) {
+      res.status(404).send("Not Found: User");
+    } else {
+      QuestionModel.find({ author: user._id }, (err, questions) => {
+        if (err) {
+          res.status(500).send("Internal Error: Find User");
+        } else {
+          res.json({
+            username: user.username,
+            created: user.created,
+            polls: questions
+          });
+        }
+      });
+    }
+  });
+}
+
+// Me API Helpers
+function isLoggedIn(req) {
+  const sess = req.session;
+  if (sess && sess.me && sess.me._id) {
+    return req.session.me;
+  } else {
+    return undefined;
+  }
+}
+function loginHelper(req, res) {
+  UserModel.findOne({
+    username: req.query.login
+  }).exec((err, user) => {
+    if (err) {
+      res.status(500).send("Internal Error: Find User");
+    } else if (!user) {
+      res.status(404).send("Not Found: User");
+    } else {
+      req.session.me = user;
+      res.status(200).send(user);
+    }
+  });
+}
+function logoutHelper(req, res) {
+  req.session.destroy(function(err) {
+    if (err) {
+      res.status(500).send("Internal Error");
+    } else {
+      res.status(200).send("logout");
+    }
+  });
+}
+
+// Me API Handlers
 function getMeHandler(req, res) {
-  if (!isLoggedIn(req)) {
+  const me = isLoggedIn(req);
+  if (!me) {
     res.status(401).send("Unauthorized");
   } else {
-    UserModel.findById(req.session.user._id).exec((findErr, me) => {
-      if (findErr) {
-        res.status(500).send("Internal Error: Find Me");
-      } else if (!me) {
-        res.status(404).send("Not Found: Me");
-      } else {
-        res.json(me);
-      }
-    });
+    res.json(me);
   }
 }
 function putMeHandler(req, res) {
@@ -354,108 +287,292 @@ function putMeHandler(req, res) {
     res.status(400).send("Bad Request: Invalid Query");
   }
 }
-function getUserHandler(req, res) {
-  UserModel.findOne({
-    username: req.params.username
-  }).exec((findErr, user) => {
-    if (findErr) {
-      res.status(500).send("Internal Error: Find User");
-    } else if (!user) {
-      res.status(404).send("Not Found: User");
+function delMeHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else {
+    UserModel.findByIdAndRemove(me._id).exec((err, user) => {
+      if (err || !user) {
+        res.status(500).send("Internal Error");
+      } else {
+        logoutHelper();
+      }
+    });
+  }
+}
+
+// Questions API Helpers
+function hasAnsweredHelper(userId, question) {} // todo
+function hasVotedHelper(userId, answers) {
+  var result = {};
+  for (let i = 0; i < answers.length; i++) {
+    let answer = answers[i];
+    if (answer.votes.up.indexOf(userId) > -1) {
+      result[answer._id] = 1;
+    } else if (answer.votes.down.indexOf(userId) > -1) {
+      result[answer._id] = -1;
+    }
+  }
+  return result;
+}
+function hasStarredHelper(userId, stars) {
+  if (stars.indexOf(userId) > -1) {
+    return true;
+  } else {
+    return false;
+  }
+}
+function hasBumppedHelper(userId, bumps) {
+  if (bumps.up.indexOf(userId) > -1) {
+    return 1;
+  } else if (bumps.down.indexOf(userId) > -1) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
+function voteUpResponseHelper(req, res) {
+  const answerId = req.params.answerId;
+  const meId = req.session.me._id;
+  AnswerModel.findOneAndUpdate(
+    {
+      _id: answerId,
+      type: "response",
+      "votes.up": { $nin: [meId] },
+      "votes.down": { $in: [meId] }
+    },
+    {
+      $push: { "votes.up": meId },
+      $pull: { "votes.down": meId },
+      $inc: { "votes.sum": 2 }
+    },
+    (err, ans) => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else if (!ans) {
+        AnswerModel.findOneAndUpdate(
+          {
+            _id: answerId,
+            type: "response",
+            "votes.up": { $nin: [meId] }
+          },
+          {
+            $push: { "votes.up": meId },
+            $inc: { "votes.sum": 1 }
+          },
+          (err, ans) => {
+            if (err) {
+              res.status(500).send("Internal Error");
+            } else if (!ans) {
+              AnswerModel.findOneAndUpdate(
+                {
+                  _id: answerId,
+                  type: "response",
+                  "votes.up": { $in: [meId] }
+                },
+                {
+                  $pull: { "votes.up": meId },
+                  $inc: { "votes.sum": -1 }
+                },
+                (err, ans) => {
+                  if (err || !ans) {
+                    res.status(500).send("Internal Error");
+                  } else {
+                    res.status(200).send("vote up toggle");
+                  }
+                }
+              );
+            } else {
+              res.status(200).send("vote up");
+            }
+          }
+        );
+      } else {
+        res.status(200).send("vote up change");
+      }
+    }
+  );
+}
+function voteDownResponseHelper(req, res) {
+  const answerId = req.params.answerId;
+  const meId = req.session.me._id;
+  AnswerModel.findOneAndUpdate(
+    {
+      _id: answerId,
+      type: "response",
+      "votes.down": { $nin: [meId] },
+      "votes.up": { $in: [meId] }
+    },
+    {
+      $push: { "votes.down": meId },
+      $pull: { "votes.up": meId },
+      $inc: { "votes.sum": -2 }
+    },
+    (err, ans) => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else if (!ans) {
+        AnswerModel.findOneAndUpdate(
+          {
+            _id: answerId,
+            type: "response",
+            "votes.down": { $nin: [meId] }
+          },
+          {
+            $push: { "votes.down": meId },
+            $inc: { "votes.sum": -1 }
+          },
+          (err, ans) => {
+            if (err) {
+              res.status(500).send("Internal Error");
+            } else if (!ans) {
+              AnswerModel.findOneAndUpdate(
+                {
+                  _id: answerId,
+                  type: "response",
+                  "votes.down": { $in: [meId] }
+                },
+                {
+                  $pull: { "votes.down": meId },
+                  $inc: { "votes.sum": 1 }
+                },
+                (err, ans) => {
+                  if (err || !ans) {
+                    res.status(500).send("Internal Error");
+                  } else {
+                    res.status(200).send("vote down toggle");
+                  }
+                }
+              );
+            } else {
+              res.status(200).send("vote down");
+            }
+          }
+        );
+      } else {
+        res.status(200).send("vote down change");
+      }
+    }
+  );
+}
+function voteOptionHelper(req, res) {
+  const answerId = req.params.answerId;
+  const meId = req.session.me._id;
+  const meObjectId = mongoose.Types.ObjectId(meId);
+
+  // find answers to this question that 'me' has voted on
+  // if there are answers, 'me' cannot voted
+  // else find the selected option and up vote
+  AnswerModel.find({
+    question: req.body.question,
+    type: "option",
+    "votes.up": { $in: [meId] }
+  }).exec((err, answers) => {
+    if (err) {
+      res.status(500).send("Internal Error");
+    } else if (answers.length > 0) {
+      res.status(403).send("Forbidden: Revote");
     } else {
-      PostModel.find({ author: user._id }, (err, posts) => {
+      AnswerModel.findOneAndUpdate(
+        {
+          _id: answerId,
+          type: "option",
+          "votes.up": { $nin: [meId] } // arbitrary
+        },
+        {
+          $push: { "votes.up": meId },
+          $inc: { "votes.sum": 1 }
+        }
+      ).exec((err, answer) => {
         if (err) {
-          res.status(500).send("Internal Error: Find User");
+          res.status(500).send("Internal Error");
         } else {
-          res.json({
-            username: user.username,
-            created: user.created,
-            posts: posts
-          });
+          res.status(200).send("vote");
         }
       });
     }
   });
 }
-function delUserHandler(req, res) {
-  UserModel.remove({
-    username: req.params.username
-  }).exec((remErr, doc) => {
-    if (remErr) {
-      res.status(500).send("Internal Error");
-    } else {
-      res.status(200).send("Deleted");
-    }
-  });
-}
-
-function loginHelper(req, res) {
-  UserModel.findOne({
-    username: req.query.login
-  }).exec((userErr, user) => {
-    if (userErr) {
-      res.status(500).send("Internal Error: Find User");
-    } else if (!user) {
-      res.status(404).send("Not Found: User");
-    } else {
-      // todo rethink http verb and status code
-      req.session.user = user;
-      res.status(200).send(user);
-    }
-  });
-}
-function logoutHelper(req, res) {
-  req.session.destroy(function(sessErr) {
-    if (sessErr) {
-      res.status(500).send("Internal Error");
-    } else {
-      res.status(200).send("logout");
-    }
-  });
-}
-function bumpUpHelper(req, res) {
-  const userId = req.session.user._id;
-  const postId = req.params.postid;
-
-  PostModel.findOneAndUpdate(
+function toggleStarHelper(req, res) {
+  const questionId = req.params.questionId;
+  const meId = req.session.me._id;
+  QuestionModel.findOneAndUpdate(
     {
-      _id: postId,
-      "meta.bumps.up": { $nin: [userId] },
-      "meta.bumps.down": { $in: [userId] }
+      _id: questionId,
+      stars: { $nin: [meId] }
     },
     {
-      $push: { "meta.bumps.up": userId },
-      $pull: { "meta.bumps.down": userId },
-      $inc: { "meta.bumps.sum": 2 }
+      $push: { stars: meId }
     },
-    (err, post) => {
+    (err, question) => {
       if (err) {
         res.status(500).send("Internal Error");
-      } else if (!post) {
-        PostModel.findOneAndUpdate(
+      } else if (!question) {
+        QuestionModel.findOneAndUpdate(
           {
-            _id: postId,
-            "meta.bumps.up": { $nin: [userId] }
+            _id: questionId,
+            stars: { $in: [meId] }
           },
           {
-            $push: { "meta.bumps.up": userId },
-            $inc: { "meta.bumps.sum": 1 }
+            $pull: { stars: meId }
           },
-          (err, post) => {
+          (err, question) => {
             if (err) {
               res.status(500).send("Internal Error");
-            } else if (!post) {
-              PostModel.findOneAndUpdate(
+            } else {
+              res.status(200).send("star off");
+            }
+          }
+        );
+      } else {
+        res.status(200).send("star on");
+      }
+    }
+  );
+}
+function bumpUpHelper(req, res) {
+  const questionId = req.params.questionId;
+  const meId = req.session.me._id;
+  QuestionModel.findOneAndUpdate(
+    {
+      _id: questionId,
+      "bumps.up": { $nin: [meId] },
+      "bumps.down": { $in: [meId] }
+    },
+    {
+      $push: { "bumps.up": meId },
+      $pull: { "bumps.down": meId },
+      $inc: { "bumps.sum": 2 }
+    },
+    (err, question) => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else if (!question) {
+        QuestionModel.findOneAndUpdate(
+          {
+            _id: questionId,
+            "bumps.up": { $nin: [meId] }
+          },
+          {
+            $push: { "bumps.up": meId },
+            $inc: { "bumps.sum": 1 }
+          },
+          (err, question) => {
+            if (err) {
+              res.status(500).send("Internal Error");
+            } else if (!question) {
+              QuestionModel.findOneAndUpdate(
                 {
-                  _id: postId,
-                  "meta.bumps.up": { $in: [userId] }
+                  _id: questionId,
+                  "bumps.up": { $in: [meId] }
                 },
                 {
-                  $pull: { "meta.bumps.up": userId },
-                  $inc: { "meta.bumps.sum": -1 }
+                  $pull: { "bumps.up": meId },
+                  $inc: { "bumps.sum": -1 }
                 },
-                (err, post) => {
-                  if (err) {
+                (err, question) => {
+                  if (err || !question) {
                     res.status(500).send("Internal Error");
                   } else {
                     res.status(200).send("bump toggle");
@@ -474,48 +591,47 @@ function bumpUpHelper(req, res) {
   );
 }
 function bumpDownHelper(req, res) {
-  const userId = req.session.user._id;
-  const postId = req.params.postid;
-
-  PostModel.findOneAndUpdate(
+  const questionId = req.params.questionId;
+  const meId = req.session.me._id;
+  QuestionModel.findOneAndUpdate(
     {
-      _id: postId,
-      "meta.bumps.down": { $nin: [userId] },
-      "meta.bumps.up": { $in: [userId] }
+      _id: questionId,
+      "bumps.down": { $nin: [meId] },
+      "bumps.up": { $in: [meId] }
     },
     {
-      $push: { "meta.bumps.down": userId },
-      $pull: { "meta.bumps.up": userId },
-      $inc: { "meta.bumps.sum": -2 }
+      $push: { "bumps.down": meId },
+      $pull: { "bumps.up": meId },
+      $inc: { "bumps.sum": -2 }
     },
-    (err, post) => {
+    (err, question) => {
       if (err) {
         res.status(500).send("Internal Error");
-      } else if (!post) {
-        PostModel.findOneAndUpdate(
+      } else if (!question) {
+        QuestionModel.findOneAndUpdate(
           {
-            _id: postId,
-            "meta.bumps.down": { $nin: [userId] }
+            _id: questionId,
+            "bumps.down": { $nin: [meId] }
           },
           {
-            $push: { "meta.bumps.down": userId },
-            $inc: { "meta.bumps.sum": -1 }
+            $push: { "bumps.down": meId },
+            $inc: { "bumps.sum": -1 }
           },
-          (err, post) => {
+          (err, question) => {
             if (err) {
               res.status(500).send("Internal Error");
-            } else if (!post) {
-              PostModel.findOneAndUpdate(
+            } else if (!question) {
+              QuestionModel.findOneAndUpdate(
                 {
-                  _id: postId,
-                  "meta.bumps.down": { $in: [userId] }
+                  _id: questionId,
+                  "bumps.down": { $in: [meId] }
                 },
                 {
-                  $pull: { "meta.bumps.down": userId },
-                  $inc: { "meta.bumps.sum": 1 }
+                  $pull: { "bumps.down": meId },
+                  $inc: { "bumps.sum": 1 }
                 },
-                (err, post) => {
-                  if (err) {
+                (err, question) => {
+                  if (err || !question) {
                     res.status(500).send("Internal Error");
                   } else {
                     res.status(200).send("bump toggle");
@@ -533,40 +649,249 @@ function bumpDownHelper(req, res) {
     }
   );
 }
-function toggleStarHelper(req, res) {
-  const userId = req.session.user._id;
-  const postId = req.params.postid;
-  PostModel.findOneAndUpdate(
-    {
-      _id: postId,
-      "meta.stars": { $nin: [userId] }
-    },
-    {
-      $push: { "meta.stars": userId }
-    },
-    (findOffErr, post) => {
-      if (findOffErr) {
+function makeBlindHelper(req, question) {
+  var blindQuestion = {
+    _id: question._id,
+    author: question.author.username,
+    title: question.title,
+    type: question.type,
+    created: question.created,
+    bumps: question.bumps.sum,
+    stars: question.stars.length,
+    answers: []
+  };
+  const me = isLoggedIn(req);
+  if (me) {
+    blindQuestion.me = {
+      bumped: hasBumppedHelper(me._id, question.bumps),
+      starred: hasStarredHelper(me._id, question.stars),
+      voted: hasVotedHelper(me._id, question.answers)
+    };
+  }
+  blindQuestion.answers = question.answers.map(answer => {
+    return {
+      _id: answer._id,
+      content: answer.content,
+      votes: answer.votes.sum,
+      author: answer.author.username
+    };
+  });
+
+  return blindQuestion;
+}
+
+// Answers API Handlers
+function crtAnswerHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else {
+    let answer = new AnswerModel({
+      question: req.body.questionId,
+      author: me._id,
+      type: "response",
+      content: req.body.content
+    });
+    answer.save(err => {});
+    QuestionModel.findOneAndUpdate(
+      {
+        _id: req.body.questionId
+      },
+      {
+        $push: { answers: answer._id }
+      }
+    ).exec((err, question) => {
+      if (err) {
         res.status(500).send("Internal Error");
-      } else if (!post) {
-        PostModel.findOneAndUpdate(
-          {
-            _id: postId,
-            "meta.stars": { $in: [userId] }
-          },
-          {
-            $pull: { "meta.stars": userId }
-          },
-          (findOnErr, post) => {
-            if (findOnErr) {
-              res.status(500).send("Internal Error");
-            } else {
-              res.status(200).send("star off");
-            }
-          }
-        );
       } else {
-        res.status(200).send("star on");
+        res.status(200).send("ok");
+      }
+    });
+  }
+}
+function putAnswerHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else if (req.query.hasOwnProperty("vote")) {
+    if (req.query.vote === "up") {
+      voteUpResponseHelper(req, res);
+    } else if (req.query.vote === "down") {
+      voteDownResponseHelper(req, res);
+    } else {
+      voteOptionHelper(req, res);
+    }
+  } else {
+    res.status(400).send("Bad Request: Invalid Query");
+  }
+}
+
+// Other API Handlers
+function getRandomQuestionHandler(req, res) {} // todo
+function getRecentListHandler(req, res) {
+  const lim = req.query.limit ? parseInt(req.query.limit, 10) : 10;
+  QuestionModel.find()
+    .sort("-created")
+    .limit(lim)
+    .populate("author")
+    .populate({
+      path: "answers",
+      populate: {
+        path: "author"
+      }
+    })
+    .exec((err, questions) => {
+      if (err) {
+        res.status(500).send("Internal Error: Find Polls");
+      } else {
+        let blinder = makeBlindHelper.bind(this, req);
+        res.json(questions.map(blinder));
+      }
+    });
+}
+function getTopListHandler(req, res) {
+  const lim = req.query.limit ? parseInt(req.query.limit, 10) : 10;
+  QuestionModel.find()
+    .sort("-bumps.sum")
+    .limit(lim)
+    .populate("author")
+    .populate({
+      path: "answers",
+      populate: {
+        path: "author"
+      }
+    })
+    .exec((err, questions) => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else {
+        let blinder = makeBlindHelper.bind(this, req);
+        res.json(questions.map(blinder));
+      }
+    });
+}
+function getListByUserHandler(req, res) {
+  // lookup user by id then query questions by user id
+  const username = req.params.username;
+  UserModel.findOne({
+    username
+  }).exec((err, user) => {
+    if (err) {
+      res.status(500).send("Internal Error");
+    } else if (!user) {
+      res.status(404).send(`Not found: ${username}`);
+    } else {
+      QuestionModel.find({
+        author: user._id
+      })
+        .populate({
+          path: "answers",
+          populate: {
+            path: "author"
+          }
+        })
+        .exec((err, questions) => {
+          if (err) {
+            res.status(500).send("Internal Error");
+          } else {
+            // manually populate the polls
+            questions.forEach(question => {
+              question.author = user;
+            });
+            let blinder = makeBlindHelper.bind(this, req);
+            res.json(questions.map(blinder));
+          }
+        });
+    }
+  });
+}
+
+// Questions API Handlers
+function crtQuestionHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else {
+    let isPoll =
+      !!req.body.hasOwnProperty("answers") && req.body.answers.length > 1;
+    let question = new QuestionModel({
+      author: me._id,
+      title: req.body.title,
+      type: isPoll ? "poll" : "discussion"
+    });
+    if (isPoll) {
+      for (let i = 0; i < req.body.answers.length; i++) {
+        let answer = new AnswerModel({
+          question: question._id,
+          author: me._id,
+          type: "option",
+          content: req.body.answers[i]
+        });
+        answer.save(err => {
+          // todo (what to do when child doc doesnt save)
+          // use hooks?
+        });
+        question.answers.push(answer._id);
       }
     }
-  );
+    question.save(err => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else {
+        res.status(200).send("ok");
+      }
+    });
+  }
+}
+function getQuestionHandler(req, res) {
+  QuestionModel.findById(req.params.questionId)
+    .populate("author")
+    .populate({
+      path: "answers",
+      populate: {
+        path: "author"
+      }
+    })
+    .exec((err, question) => {
+      if (err) {
+        res.status(500).send("Internal Error");
+      } else if (!question) {
+        res.status(404).send("Not Found");
+      } else {
+        res.json(makeBlindHelper(req, question));
+      }
+    });
+}
+function putQuestionHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else if (req.query.hasOwnProperty("star")) {
+    toggleStarHelper(req, res);
+  } else if (req.query.hasOwnProperty("bump")) {
+    if (req.query.bump === "up") {
+      bumpUpHelper(req, res);
+    } else if (req.query.bump === "down") {
+      bumpDownHelper(req, res);
+    }
+  } else {
+    res.status(400).send("Bad Request: Invalid Query");
+  }
+}
+function delQuestionHandler(req, res) {
+  const me = isLoggedIn(req);
+  if (!me) {
+    res.status(401).send("Unauthorized");
+  } else {
+    QuestionModel.findOneAndRemove({
+      _id: req.params.questionId,
+      author: { $eq: mongoose.Types.ObjectId(me._id) }
+    }).exec((err, question) => {
+      if (err || !question) {
+        res.status(500).send("Internal Error");
+      } else {
+        res.status(200).send("delete");
+      }
+    });
+  }
 }
