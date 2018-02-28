@@ -27,16 +27,6 @@ function timeSince(date) {
 }
 
 // Helpers
-function isPoll(question) {
-  return (
-    question.answers &&
-    question.answers.length > 0 &&
-    question.answers.reduce(
-      (bool, answer) => bool && answer.author === question.author,
-      true
-    )
-  );
-}
 function appendAlert(msg) {
   var $el = $(`<li style="width: 100%; border:">${msg}</li>`);
   $el.appendTo("#alerts");
@@ -44,56 +34,56 @@ function appendAlert(msg) {
     $el.remove();
   }, 2000);
 }
-function appendQuestionHeader(where = "body", question = undefined) {
+function appendMetaHeader(where = "body", meta) {
   $(where).append(`
     <table border="1" style="width: 100%; margin-bottom: 5px;">
       <tbody>
         <tr>
           <td style="padding: 10px; text-align: center;">
-            <a href="" id="do-bump-up-question" data-id="${
-              question._id
-            }" style="text-decoration: none;">
-              ${question.me && question.me.bumped > 0 ? "&#9650;" : "&#9651;"}
+            <a href="" id="do-bump-up-meta" data-type="${meta.type}" data-id="${
+    meta._id
+  }" style="text-decoration: none;">
+              ${meta.me && meta.me.bumped > 0 ? "&#9650;" : "&#9651;"}
             </a>
               </br>
-              ${question.bumps}
+              ${meta.bumps}
               </br>
-            <a href="" id="do-bump-down-question" data-id="${
-              question._id
-            }" style="text-decoration: none;">
-              ${question.me && question.me.bumped < 0 ? "&#9660;" : "&#9661;"}
+            <a href="" id="do-bump-down-meta" data-type="${
+              meta.type
+            }" data-id="${meta._id}" style="text-decoration: none;">
+              ${meta.me && meta.me.bumped < 0 ? "&#9660;" : "&#9661;"}
             </a>
           </td>
           <td style="padding: 10px;" width="75%">
             <h3>
-            <a href="" id="show-question" data-id="${question._id}">${
-    question.title
-  }</a>
+            <a href="" id="show-meta" data-type="${meta.type}" data-id="${
+    meta._id
+  }">${meta.content.title}</a>
             </h3>
+            <p>${meta.content.body ? meta.content.body : ""}</p>
             <p>
-              by <a id="show-user" data-id="${question.author}" href="">${
-    question.author
+              by <a id="show-user" data-id="${meta.author}" href="">${
+    meta.author
   }</a>
-              ${timeSince(Date.parse(question.created))} ago
+              ${timeSince(Date.parse(meta.created))} ago
               </br>
               ${
-                question.type === "poll"
-                  ? question.answers.reduce(
-                      (sum, answer) => sum + answer.votes,
-                      0
-                    ) + " votes"
-                  : question.answers.length + " answers"
+                meta.type === "discussion" || meta.type === "response"
+                  ? meta.responses + " responses"
+                  : meta.type === "question"
+                    ? meta.answers + " answers"
+                    : meta.votes + " votes"
               }
             </p>
           </td>
           <td style="padding: 10px; text-align: center;">
-            <a href="" id="do-star-question" data-id="${
-              question._id
-            }" style="text-decoration: none;">
-              ${question.me && question.me.starred ? "&#9733" : "&#9734"}
+            <a href="" id="do-star-toggle-meta" data-type="${
+              meta.type
+            }" data-id="${meta._id}" style="text-decoration: none;">
+              ${meta.me && meta.me.starred ? "&#9733" : "&#9734"}
             </a>
             </br>
-            ${question.stars}
+            ${meta.stars}
           </td>
         </tr>
       </tbody>
@@ -106,32 +96,31 @@ function listHelper(where = "body", list = []) {
       `<p style="text-align: center;">No questions yet</br>¯\\_(ツ)_/¯</br></p>`
     );
   } else {
-    list.forEach(function(question) {
-      appendQuestionHeader(where, question);
+    list.forEach(function(meta) {
+      appendMetaHeader(where, meta);
     });
   }
 }
-function appendQuestionListByUser(where = "body", username) {
-  $(where).append(`<div id="app-${username}-question-list"></div>`);
+function appendMetaListByUser(where = "body", username) {
   $.ajax({
-    url: `api/users/${username}/questions`,
+    url: `api/users/${username}`,
     method: "GET"
   })
-    .done(function(list) {
-      listHelper(`#app-${username}-question-list`, list);
+    .done(function(user) {
+      listHelper(where, user.metas);
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
     });
 }
-function appendQuestionListByQuery(where = "body", query = "top", limit = 3) {
-  $(where).append(`<div id="app-${query}-question-list"></div>`);
+function appendMetaListByQuery(where = "body", query = "top", limit = 3) {
+  $(where).append(`<div id="app-${query}-meta-list"></div>`);
   $.ajax({
-    url: `api/questions/${query}?` + $.param({ limit }),
+    url: `api/metas/${query}?` + $.param({ limit }),
     method: "GET"
   })
     .done(function(list) {
-      listHelper(`#app-${query}-question-list`, list);
+      listHelper(`#app-${query}-meta-list`, list);
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
       appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
@@ -140,10 +129,24 @@ function appendQuestionListByQuery(where = "body", query = "top", limit = 3) {
 
 // User Views
 function showUser(username) {
-  $("#app").html(`<div id="app-user"><fieldset style="border-left-style: none;
-  border-right-style: none;
-  border-bottom-style: none; padding-bottom: 0px;"><legend>${username}</legend></fieldset></div>`);
-  appendQuestionListByUser("#app-user", username);
+  $.ajax({
+    url: `api/users/${username}`,
+    method: "GET"
+  })
+    .done(function(user) {
+      $(
+        "#app"
+      ).html(`<div id="app-user"><fieldset style="border-left-style: none;
+      border-right-style: none;
+      border-bottom-style: none; padding-bottom: 0px;"><legend>${username}</legend></fieldset>
+      <p>Member since ${new Date(user.created).toDateString()}</p>
+      <div id="app-${username}-meta-list"></div>
+      </div>`);
+      listHelper(`#app-${username}-meta-list`, user.metas);
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
 }
 function showDashboard() {
   var username = window.cider.user.username;
@@ -156,14 +159,30 @@ function showDashboard() {
   $("#app")
     .html(`<div id="app-dashboard"><fieldset style="border-left-style: none;
     border-right-style: none;
-    border-bottom-style: none; padding-bottom: 0px;"><legend>Dashboard</legend></fieldset></div>`);
-  appendQuestionListByUser("#app-dashboard", username);
+    border-bottom-style: none; padding-bottom: 0px;"><legend>Dashboard</legend></fieldset>
+    <div id="app-dashboard-user"></div>
+    </div>`);
+  appendMetaListByUser("#app-dashboard-user", username);
+
+  $("#app-dashboard").append(`
+    <fieldset style="border: 1px solid black; margin-top: 10px;">
+      <legend>Discuss</legend>
+      <form id="question-form" style="width: 100%; text-align: left;">
+          <input id="discussion-title-input" type="text" placeholder="Discussion Title ..." style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
+          <textarea id="discussion-body-textarea" style="min-width: 100%; width: 100%; margin: 0px;
+          display: block; box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Discussion Body ..." />
+          <button id="do-crt-discussion" type="submit" style="float: right;">Submit Discussion >></button>
+      </form>
+    </fieldset>
+  `);
 
   $("#app-dashboard").append(`
     <fieldset style="border: 1px solid black; margin-top: 10px;">
       <legend>Ask</legend>
       <form id="question-form" style="width: 100%; text-align: left;">
-          <input id="question-title-input" type="text" placeholder="Question" style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
+          <input id="question-title-input" type="text" placeholder="Question Title ..." style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
+          <textarea id="question-body-textarea" style="min-width: 100%; width: 100%; margin: 0px;
+          display: block; box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Question Body ..." />
           <button id="do-crt-question" type="submit" style="float: right;">Submit Question >></button>
       </form>
     </fieldset>
@@ -174,11 +193,11 @@ function showDashboard() {
       <legend>Poll</legend>
       <form id="poll-form" style="width: 100%; text-align: left;">
           <input id="poll-title-input" type="text" placeholder="Title" style="margin-bottom: 10px; display: inline-block; width: 100%; box-sizing: border-box;" />
-          <div id="poll-answers">
+          <div id="poll-options">
             <input data-id="1" id="poll-answer-1-input" type="text" placeholder="Option 1" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
             <input data-id="2" id="poll-answer-2-input" type="text" placeholder="Option 2" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
           </div>
-          <a href="" id="append-poll-answer" style="float:left">+ option</a>
+          <a href="" id="append-poll-option" style="float:left">+ option</a>
           <button id="do-crt-poll" type="submit" style="float: right;">Submit Poll >></button>
       </form>
     </fieldset>
@@ -199,24 +218,24 @@ function showLoginForm() {
 }
 
 // Question Views
-function showTopQuestionList() {
+function showTopMetaList() {
   $("#app").html(`<fieldset style="border-left-style: none;
   border-right-style: none;
   border-bottom-style: none; padding-bottom: 0px;"><legend>Top</legend></fieldset>`);
-  appendQuestionListByQuery("#app", "top", 3);
+  appendMetaListByQuery("#app", "top", 3);
 }
-function showRecentQuestionList() {
+function showRecentMetaList() {
   $("#app").html(`<fieldset style="border-left-style: none;
   border-right-style: none;
   border-bottom-style: none; padding-bottom: 0px;"><legend>Recent</legend></fieldset>`);
-  appendQuestionListByQuery("#app", "recent", 10);
+  appendMetaListByQuery("#app", "recent", 10);
 }
-function showQuestion(questionId) {
+function showMeta(type, metaId) {
   $.ajax({
-    url: `api/questions/${questionId}`,
+    url: `api/${type}s/${metaId}`,
     method: "GET"
   })
-    .done(function(question) {
+    .done(function(meta) {
       $("#app").html(`
       <div id="app">
         <fieldset style="
@@ -224,16 +243,17 @@ function showQuestion(questionId) {
           border-right-style: none;
           border-bottom-style: none;
           padding-bottom: 0px;">
-      <legend>${question.type.charAt(0).toUpperCase() +
-        question.type.slice(1)}</legend>
+      <legend>${type.charAt(0).toUpperCase() + type.slice(1)}</legend>
         </fieldset>
       </div>
       `);
-      appendQuestionHeader("#app", question);
-      if (question.type === "poll") {
-        appendPoll("#app", question);
+      appendMetaHeader("#app", meta);
+      if (type === "discussion") {
+        appendDiscussion("#app", meta);
+      } else if (type === "question") {
+        appendQuestion("#app", meta);
       } else {
-        appendDiscussion("#app", question);
+        appendPoll("#app", meta);
       }
     })
     .fail(function(jqXHR, textStatus, errorThrown) {
@@ -242,36 +262,57 @@ function showQuestion(questionId) {
 }
 
 // Question Views
-function appendDiscussion(where = "body", question) {
+function appendDiscussion(where = "body", discussion) {
   $(where).append(`
-  <div id="app-question">
-
-  <fieldset style="border: 1px solid black;  margin-bottom: 5px;">
-    <legend>Answer</legend>
-
-      <form id="app-question-answer-form" style="text-align: right;">
-
-        <textarea id="answer-input" style="min-width: 100%; width: 100%; margin: 0px;
-      display: block;
-      box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Answer"></textarea>
-          <button data-id=${
-            question._id
-          } id="do-del-question" type="submit">Delete Question</button>
-          <button data-id=${
-            question._id
-          } id="do-crt-answer" type="submit">Submit Answer >></button>
-      </form>
-
-    </fieldset>
-
-    <div id="app-question-answers">
-      <!-- append question answers here -->
+    <div id="app-discussion">
+      <fieldset style="border: 1px solid black; margin-bottom: 5px;">
+        <legend>Response</legend>
+          <form id="app-response-form" style="text-align: right;">
+          <textarea id="response-body-textarea" style="min-width: 100%; width: 100%; margin: 0px;
+          display: block; box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Response Body ..." />
+            <button data-type="discussion" data-id=${
+              discussion._id
+            } id="do-del-meta" type="submit">Delete Discussion</button>
+              <button data-discussion-id=${
+                discussion._id
+              } id="do-reply-discussion" type="submit">Submit Response >></button>
+          </form>
+        </fieldset>
+        <div id="app-discussion-responses">
+          <!-- append discussion responses here -->
+        </div>
     </div>
-
-  </div>
   `);
 
-  question.answers.forEach(function(answer, i) {
+  discussion.children.forEach(function(response) {
+    appendMetaHeader("#app-discussion-responses", response);
+  });
+}
+
+// Question Views
+function appendQuestion(where = "body", question) {
+  $(where).append(`
+    <div id="app-question">
+      <fieldset style="border: 1px solid black; margin-bottom: 5px;">
+        <legend>Answer</legend>
+          <form id="app-answer-form" style="text-align: right;">
+          <textarea id="answer-body-textarea" style="min-width: 100%; width: 100%; margin: 0px;
+          display: block; box-sizing: border-box; padding: 1px; margin-bottom: 10px;" placeholder="Answer Body ..." />
+            <button data-type="question" data-id=${
+              question._id
+            } id="do-del-meta" type="submit">Delete Question</button>
+              <button data-question-id=${
+                question._id
+              } id="do-answer-question" type="submit">Submit Answer >></button>
+          </form>
+        </fieldset>
+        <div id="app-question-answers">
+          <!-- append question answers here -->
+        </div>
+    </div>
+  `);
+
+  question.children.forEach(function(answer, i) {
     $("#app-question-answers").append(`
           <table border="1" style="width: 100%; margin-bottom: 5px;">
             <tbody>
@@ -289,7 +330,7 @@ function appendDiscussion(where = "body", question) {
                     }
                   </a>
                     </br>
-                    ${answer.votes}
+                    ${answer.bumps}
                     </br>
                   <a href="" id="do-vote-down-answer" data-question-id="${
                     question._id
@@ -304,7 +345,7 @@ function appendDiscussion(where = "body", question) {
                   </a>
                 </td>
                 <td style="padding: 10px;" width="75%">
-                  <h3>${answer.content}</h3>
+                  <h3>${answer.content.body}</h3>
                   <p>
                     by <a id="show-user" data-id="${
                       answer.author
@@ -319,41 +360,31 @@ function appendDiscussion(where = "body", question) {
 }
 
 // Poll Views
-function appendPoll(where = "body", question) {
+function appendPoll(where = "body", poll) {
   $(where).append(`
-
     <div id="app-poll">
-
       <fieldset style="border: 1px solid black;">
         <legend>Vote</legend>
-
-        <div id="app-poll-answers">
-          <!-- append poll answers here -->
+        <div id="app-poll-options">
+          <!-- append poll options here -->
         </div>
-
         <form id="poll-form" style="text-align: right;">
-          <button data-id=${
-            question._id
-          } id="do-del-question" type="submit">Delete</button>
-          <button data-id=${
-            question._id
-          } id="do-vote-poll" type="submit">Submit Vote >></button>
+          <button data-type="poll" data-id=${
+            poll._id
+          } id="do-del-meta" type="submit">Delete</button>
+          <button data-poll-id=${
+            poll._id
+          } id="do-vote-option" type="submit">Submit Vote >></button>
         </form>
-
       </fieldset>
-
     </div>
-    `);
+  `);
 
-  var totalVotes = question.answers.reduce(
-    (sum, answer) => sum + answer.votes,
-    0
-  );
-
-  question.answers.forEach(function(answer, i) {
-    var percentage = (totalVotes > 0 ? answer.votes / totalVotes : 0) * 100;
+  var totalVotes = poll.options.reduce((sum, option) => sum + option.votes, 0);
+  poll.options.forEach(function(option, i) {
+    var percentage = (totalVotes > 0 ? option.votes / totalVotes : 0) * 100;
     //var barGraph = "/".repeat(Math.floor(percentage * 50));
-    $("#app-poll-answers").append(`
+    $("#app-poll-options").append(`
           <table border="1" style="width: 100%; margin-bottom: 5px;">
             <tbody>
               <tr>
@@ -362,145 +393,23 @@ function appendPoll(where = "body", question) {
                 </td>
                 <td style="padding: 10px;" width="75%">
                   <span>
-                    <label for="app-poll-answers-${i}">${answer.content}</label>
+                    <label for="app-poll-options-${i}">${option.content}</label>
                   </span>
                   </br>
                   <small>
-                     ${answer.votes} votes | ${percentage} %
+                     ${option.votes} votes | ${percentage} %
                   </small>
                 </td>
                 <td style="padding: 10px; text-align: center;">
-                  <input type="radio" data-id="${
-                    answer._id
-                  }" id="app-poll-answers-${i}" name="vote" style="padding: 0px; margin: 0px;" />
+                  <input type="radio" data-option-id="${
+                    option._id
+                  }" id="app-poll-options-${i}" name="vote" style="padding: 0px; margin: 0px;" ${poll.me && poll.me.voted[option._id] ? "checked" : ""} />
                 </td>
               </tr>
             </tbody>
           </table>
         `);
   });
-}
-
-// Question Actions
-function doCrtAnswer(questionId = "", answer = "") {
-  $.ajax({
-    url: `api/answers`,
-    method: "POST",
-    data: {
-      questionId,
-      content: answer
-    }
-  })
-    .done(function() {
-      showQuestion(questionId);
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-
-// Question Actions
-function doCrtQuestion(title = "", answers = []) {
-  var data = {
-    title
-  };
-  if (answers.length > 0) {
-    data.answers = answers;
-  }
-  $.ajax({
-    url: "api/questions",
-    method: "POST",
-    data
-  })
-    .done(function() {
-      showDashboard();
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-function doDelQuestion(questionId = "") {
-  $.ajax({
-    url: `api/questions/${questionId}`,
-    method: "DELETE"
-  })
-    .done(function() {
-      showDashboard();
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-function doStarQuestion(questionId = "", star = "") {
-  $.ajax({
-    url: `api/questions/${questionId}?star`,
-    method: "PUT"
-  })
-    .done(function() {
-      if ($("#app-top-question-list").length) {
-        showTopQuestionList();
-      } else if ($("#app-recent-question-list").length) {
-        showRecentQuestionList();
-      } else if ($("#app-dashboard").length) {
-        showDashboard();
-      } else if ($("#app-user").length) {
-        showUser($("#app-user legend").text());
-      } else {
-        showQuestion(questionId);
-      }
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-function doBumpQuestion(questionId = "", bump = "") {
-  $.ajax({
-    url: `api/questions/${questionId}?` + $.param({ bump }),
-    method: "PUT"
-  })
-    .done(function() {
-      if ($("#app-top-question-list").length) {
-        showTopQuestionList();
-      } else if ($("#app-recent-question-list").length) {
-        showRecentQuestionList();
-      } else if ($("#app-dashboard").length) {
-        showDashboard();
-      } else if ($("#app-user").length) {
-        showUser($("#app-user legend").text());
-      } else {
-        showQuestion(questionId);
-      }
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-function doVoteAnswer(questionId = "", answerId = "", vote = "") {
-  $.ajax({
-    url: `api/answers/${answerId}?` + $.param({ vote }),
-    method: "PUT"
-  })
-    .done(function() {
-      showQuestion(questionId);
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
-}
-function doVotePoll(questionId = "", answerId = "") {
-  $.ajax({
-    url: `api/answers/${answerId}?vote`,
-    method: "PUT",
-    data: {
-      question: questionId
-    }
-  })
-    .done(function() {
-      showQuestion(questionId);
-    })
-    .fail(function(jqXHR, textStatus, errorThrown) {
-      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
-    });
 }
 
 // User Actions
@@ -550,15 +459,189 @@ function doLogoutUser() {
     });
 }
 
-// Event Handlers
-$("body").delegate("#show-top-question-list", "click", function(e) {
+// Meta Actions
+function doStarToggleMeta(type = "question|poll", metaId) {
+  $.ajax({
+    url: `api/${type}s/${metaId}?star`,
+    method: "PUT"
+  })
+    .done(function() {
+      if ($("#app-top-meta-list").length) {
+        showTopMetaList();
+      } else if ($("#app-recent-meta-list").length) {
+        showRecentMetaList();
+      } else if ($("#app-dashboard").length) {
+        showDashboard();
+      } else if ($("#app-user").length) {
+        showUser($("#app-user legend").text());
+      } else {
+        showMeta(type, metaId);
+      }
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doBumpMeta(type = "question|poll", metaId, bump = "up|down") {
+  $.ajax({
+    url: `api/${type}s/${metaId}?` + $.param({ bump }),
+    method: "PUT"
+  })
+    .done(function() {
+      if ($("#app-top-meta-list").length) {
+        showTopMetaList();
+      } else if ($("#app-recent-meta-list").length) {
+        showRecentMetaList();
+      } else if ($("#app-dashboard").length) {
+        showDashboard();
+      } else if ($("#app-user").length) {
+        showUser($("#app-user legend").text());
+      } else {
+        showMeta(type, metaId);
+      }
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doDelMeta(type = "question|poll", metaId) {
+  $.ajax({
+    url: `api/${type}s/${metaId}`,
+    method: "DELETE"
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+
+// Discussion Actions
+function doCrtDiscussion(title, body) {
+  $.ajax({
+    url: `api/discussions`,
+    method: "POST",
+    data: {
+      title,
+      body
+    }
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doReplyDiscussion(discussionId, body) {
+  $.ajax({
+    url: `api/discussions/${discussionId}?reply`,
+    method: "PUT",
+    data: {
+      body
+    }
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+
+// Question Actions
+function doCrtQuestion(title, body) {
+  $.ajax({
+    url: `api/questions`,
+    method: "POST",
+    data: {
+      title,
+      body
+    }
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doAnswerQuestion(questionId, body) {
+  $.ajax({
+    url: `api/questions/${questionId}?answer`,
+    method: "PUT",
+    data: {
+      body
+    }
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doVoteAnswer(questionId, answerId, vote = "up|down") {
+  var query = `${vote}Vote`;
+  var params = {};
+  params[query] = answerId;
+  $.ajax({
+    url: `api/questions/${questionId}?` + $.param(params),
+    method: "PUT"
+  })
+    .done(function() {
+      showMeta("question", questionId);
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+
+// Poll Actions
+function doCrtPoll(title, body, options) {
+  $.ajax({
+    url: `api/polls`,
+    method: "POST",
+    data: {
+      title,
+      body,
+      options
+    }
+  })
+    .done(function() {
+      showDashboard();
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+function doVoteOption(pollId, optionId) {
+  $.ajax({
+    url: `api/polls/${pollId}?` + $.param({ vote: optionId }),
+    method: "PUT"
+  })
+    .done(function() {
+      showMeta("poll", pollId);
+    })
+    .fail(function(jqXHR, textStatus, errorThrown) {
+      appendAlert(`${jqXHR.status} ${jqXHR.responseText}`);
+    });
+}
+
+// Nav Events
+$("body").delegate("#show-top-meta-list", "click", function(e) {
   e.preventDefault();
-  showTopQuestionList(e.target.dataset.id);
+  var metaId = e.target.dataset.id;
+  showTopMetaList(metaId);
 });
-$("body").delegate("#show-recent-question-list", "click", function(e) {
+$("body").delegate("#show-recent-meta-list", "click", function(e) {
   e.preventDefault();
-  showRecentQuestionList(e.target.dataset.id);
+  var metaId = e.target.dataset.id;
+  showRecentMetaList(metaId);
 });
+
+// Other Events
 $("body").delegate("#show-login-form", "click", function(e) {
   e.preventDefault();
   showLoginForm(e.target.dataset.id);
@@ -571,97 +654,14 @@ $("body").delegate("#show-user", "click", function(e) {
   e.preventDefault();
   showUser(e.target.dataset.id);
 });
-$("body").delegate("#show-question", "click", function(e) {
+$("body").delegate("#show-meta", "click", function(e) {
   e.preventDefault();
-  showQuestion(e.target.dataset.id);
-});
-$("body").delegate("#append-poll-answer", "click", function(e) {
-  e.preventDefault();
-  var flag = 0;
-  var answers = $("#poll-answers > input");
-  if (answers.length === 5) {
-    flag = 1;
-    appendAlert("exceeded max answers");
-  }
-  var idxs = [];
-  answers.each(function() {
-    idxs.push(parseInt(this.dataset.id, 10));
-  });
-  idxs.sort();
-  var minIdx = idxs[idxs.length - 1] + 1;
-  // note: findMinIdx has lgn solution with binary search
-  for (var i = 1; i < idxs.length; i++) {
-    if (idxs[i] - idxs[i - 1] > 1) {
-      minIdx = idxs[i - 1] + 1;
-      break;
-    }
-  }
-  if (!flag) {
-    $("#poll-answers").append(`
-      <input data-id="${minIdx}" id="poll-answer-${minIdx}-input" type="text" placeholder="Option ${minIdx}" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
-      <a href="" id="remove-poll-answer-${minIdx}" style="text-decoration: none;">&#10005;</a>
-    `);
-    $("body").delegate(`#remove-poll-answer-${minIdx}`, "click", function(e) {
-      e.preventDefault();
-      $(`#poll-answer-${minIdx}-input`).remove();
-      $("body").undelegate(`#remove-poll-answer-${minIdx}`, "click");
-      $(`#remove-poll-answer-${minIdx}`).remove();
-    });
-  }
+  var type = e.target.dataset.type;
+  var metaId = e.target.dataset.id;
+  showMeta(type, metaId);
 });
 
-$("body").delegate("#do-crt-question", "click", function(e) {
-  e.preventDefault();
-  var flag = 0;
-  var title = $("#question-title-input").val();
-  if (!title || title === "") {
-    flag = 1;
-    appendAlert("invalid question title");
-  }
-  if (!flag) {
-    doCrtQuestion(title);
-  }
-});
-$("body").delegate("#do-del-question", "click", function(e) {
-  e.preventDefault();
-  var id = e.target.dataset.id;
-  doDelQuestion(e.target.dataset.id);
-});
-$("body").delegate("#do-bump-up-question", "click", function(e) {
-  e.preventDefault();
-  doBumpQuestion(e.target.dataset.id, "up");
-});
-$("body").delegate("#do-bump-down-question", "click", function(e) {
-  e.preventDefault();
-  doBumpQuestion(e.target.dataset.id, "down");
-});
-$("body").delegate("#do-star-question", "click", function(e) {
-  e.preventDefault();
-  doStarQuestion(e.target.dataset.id);
-});
-
-$("body").delegate("#do-crt-answer", "click", function(e) {
-  e.preventDefault();
-  var answer = $("#answer-input").val();
-  var flag = 0;
-  if (!answer || answer === "") {
-    flag = 1;
-    appendAlert("invalid answer input");
-  }
-  if (!flag) {
-    doCrtAnswer(e.target.dataset.id, answer);
-    $("input #answer-input").val("");
-  }
-});
-$("body").delegate("#do-vote-up-answer", "click", function(e) {
-  e.preventDefault();
-  doVoteAnswer(e.target.dataset.questionId, e.target.dataset.answerId, "up");
-});
-$("body").delegate("#do-vote-down-answer", "click", function(e) {
-  e.preventDefault();
-  doVoteAnswer(e.target.dataset.questionId, e.target.dataset.answerId, "down");
-});
-
+// User Events
 $("body").delegate("#do-crt-user", "click", function(e) {
   e.preventDefault();
   var flag = 0;
@@ -693,36 +693,174 @@ $("body").delegate("#do-logout-user", "click", function(e) {
   doLogoutUser();
 });
 
+// Meta Events
+$("body").delegate("#do-star-toggle-meta", "click", function(e) {
+  e.preventDefault();
+  var type = e.target.dataset.type;
+  doStarToggleMeta(type, e.target.dataset.id);
+});
+$("body").delegate("#do-bump-up-meta", "click", function(e) {
+  e.preventDefault();
+  var type = e.target.dataset.type;
+  doBumpMeta(type, e.target.dataset.id, "up");
+});
+$("body").delegate("#do-bump-down-meta", "click", function(e) {
+  e.preventDefault();
+  var type = e.target.dataset.type;
+  doBumpMeta(type, e.target.dataset.id, "down");
+});
+$("body").delegate("#do-del-meta", "click", function(e) {
+  e.preventDefault();
+  var type = e.target.dataset.type;
+  doDelMeta(type, e.target.dataset.id);
+});
+
+// Discussion Events
+$("body").delegate("#do-crt-discussion", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var title = $("#discussion-title-input").val();
+  var body = $("#discussion-body-textarea").val();
+  if (!title || title === "") {
+    flag = 1;
+    appendAlert("invalid discussion title");
+  }
+  if (!body || body === "") {
+    flag = 1;
+    appendAlert("invalid discussion body");
+  }
+  if (!flag) {
+    doCrtDiscussion(title, body);
+  }
+});
+$("body").delegate("#do-reply-discussion", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var discussionId = e.target.dataset.discussionId;
+  var body = $("#response-body-textarea").val();
+  if (!body || body === "") {
+    flag = 1;
+    appendAlert("invalid discussion input");
+  }
+  if (!flag) {
+    doReplyDiscussion(discussionId, body);
+    $("#response-body-textarea").val("");
+  }
+});
+
+// Question Events
+$("body").delegate("#do-crt-question", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var title = $("#question-title-input").val();
+  var body = $("#question-body-textarea").val();
+  if (!title || title === "") {
+    flag = 1;
+    appendAlert("invalid question title");
+  }
+  if (!body || body === "") {
+    flag = 1;
+    appendAlert("invalid question body");
+  }
+  if (!flag) {
+    doCrtQuestion(title, body);
+  }
+});
+$("body").delegate("#do-answer-question", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var questionId = e.target.dataset.questionId;
+  var body = $("#answer-body-textarea").val();
+  if (!body || body === "") {
+    flag = 1;
+    appendAlert("invalid answer input");
+  }
+  if (!flag) {
+    doAnswerQuestion(questionId, body);
+    $("#answer-body-textarea").val("");
+  }
+});
+$("body").delegate("#do-vote-up-answer", "click", function(e) {
+  e.preventDefault();
+  var questionId = e.target.dataset.questionId;
+  var answerId = e.target.dataset.answerId;
+  doVoteAnswer(questionId, answerId, "up");
+});
+$("body").delegate("#do-vote-down-answer", "click", function(e) {
+  e.preventDefault();
+  var questionId = e.target.dataset.questionId;
+  var answerId = e.target.dataset.answerId;
+  doVoteAnswer(questionId, answerId, "down");
+});
+
+// Poll Events
 $("body").delegate("#do-crt-poll", "click", function(e) {
   e.preventDefault();
   var flag = 0;
   var title = $("#poll-title-input").val();
-  var answers = [];
-  $("#poll-answers > input").each(function() {
-    if (this.value && this.value != "") answers.push(this.value);
+  var body; // todo
+  var options = [];
+  $("#poll-options > input").each(function() {
+    if (this.value && this.value != "") options.push(this.value);
   });
   if (!title || title === "") {
     flag = 1;
     appendAlert("invalid poll title");
   }
-  if (answers.length < 2) {
+  if (options.length < 2) {
     flag = 1;
     appendAlert("minimum two options");
   }
   if (!flag) {
-    doCrtQuestion(title, answers);
+    doCrtPoll(title, body, options);
   }
 });
-$("body").delegate("#do-vote-poll", "click", function(e) {
+$("body").delegate("#do-vote-option", "click", function(e) {
   e.preventDefault();
+  var pollId = e.target.dataset.pollId;
   var selected = $("input[name=vote]:checked");
+  var optionId = selected[0].dataset.optionId;
   var flag = 0;
   if (!selected.length) {
     flag = 1;
     appendAlert("no selection");
   }
   if (!flag) {
-    doVotePoll(e.target.dataset.id, selected[0].dataset.id, "up");
+    doVoteOption(pollId, optionId);
+  }
+});
+$("body").delegate("#append-poll-option", "click", function(e) {
+  e.preventDefault();
+  var flag = 0;
+  var answers = $("#poll-answers > input");
+  if (answers.length === 5) {
+    flag = 1;
+    appendAlert("exceeded max answers");
+  }
+  var idxs = [];
+  answers.each(function() {
+    idxs.push(parseInt(this.dataset.id, 10));
+  });
+  idxs.sort();
+  var minIdx = idxs[idxs.length - 1] + 1;
+  // note: findMinIdx has lgn solution with binary search
+  for (var i = 1; i < idxs.length; i++) {
+    if (idxs[i] - idxs[i - 1] > 1) {
+      minIdx = idxs[i - 1] + 1;
+      break;
+    }
+  }
+  if (!flag) {
+    $("#poll-options").append(`
+      <input data-id="${minIdx}" id="poll-options-${minIdx}-input" type="text" placeholder="Option ${minIdx}" style="margin-bottom: 10px; display: inline-block; width: 90%; box-sizing: border-box;" />
+      <a href="" id="remove-poll-options-${minIdx}" style="text-decoration: none;">&#10005;</a>
+    `);
+    $("body").delegate(`#remove-poll-options-${minIdx}`, "click", function(e) {
+      e.preventDefault();
+      $(`#poll-options-${minIdx}-input`).remove();
+      $("body").undelegate(`#remove-poll-options-${minIdx}`, "click");
+      $(`#remove-poll-options-${minIdx}`).remove();
+    });
   }
 });
 
@@ -738,6 +876,6 @@ $(function() {
       showDashboard();
     })
     .fail(function() {
-      showTopQuestionList();
+      showTopMetaList();
     });
 });

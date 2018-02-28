@@ -8,4 +8,6 @@
 - split db handlers, schemas into own files (create folder system)
 - use hooks for deletes (delete question and answers); anywhere else?
 - only allow user to respond to question once
-- post types: discussion, question, poll
+- search
+- better threaded discussions
+- split out posts into own schemas
