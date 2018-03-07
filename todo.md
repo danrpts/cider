@@ -1,14 +1,15 @@
 Misc
 - optimize schemas and handlers
-- allow revote
+- allow poll revote
+- lock vote after some time
 - only allow user to respond to question once
-- use aggregate/mapReduce for bumps, stars, options/votes ?
 - use ES6 promises with Mongoose
 - upgrade to Koa
 - validate and sanitize schema inputs
 - modularize code and create folder hierarchy
-- use hooks for deletes (delete question and answers); anywhere else?
+- use hooks for deletes
 - search
+- create folder hierarchy
 
 v0.0.0
 - [x] Added support for users sessions
@@ -26,6 +27,7 @@ v0.2.0
 - [x] Discussions, Questions, Answers, and Polls share a schema
 
 v0.3.0
+- [ ] Passport integration
 - [ ] Metadata schema shared by all post styles
 - [ ] Discussion may use a "threaded comment" style schema
 - [ ] Question/Answer may use a "chronological comment" style schema
