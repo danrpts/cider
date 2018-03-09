@@ -1,16 +1,3 @@
-Misc
-- optimize schemas and handlers
-- allow poll revote
-- lock vote after some time
-- only allow user to respond to question once
-- use ES6 promises with Mongoose
-- upgrade to Koa
-- validate and sanitize schema inputs
-- modularize code and create folder hierarchy
-- use hooks for deletes
-- search
-- create folder hierarchy
-
 v0.0.0
 - [x] Added support for users sessions
 - [x] Added support for polling
@@ -28,13 +15,21 @@ v0.2.0
 
 v0.3.0
 - [ ] Passport integration
-- [ ] Metadata schema shared by all post styles
-- [ ] Discussion may use a "threaded comment" style schema
-- [ ] Question/Answer may use a "chronological comment" style schema
-- [ ] Poll may use an "embedded comment" schema
+- [ ] Metadata schema shared by discussion and comments
+- [x] Discussion may use a "threaded comment" style schema
 - [ ] Votes may be stored in bucket style schema (eg. 100 votes per document)
-- [ ] Stars and bumps may be stored in bucket style schema
-- [ ] Bucket style schemas must have efficient mapping to metadata and user owned content
+- [x] Stars stored in ref array on User and count is denormalized on discussion
 
 v1.0.0
-- react frontend
+- [ ] React frontend
+
+Misc
+- optimize schemas and handlers
+- lock revote after some time
+- use ES6 promises with Mongoose
+- upgrade to Koa
+- validate and sanitize schema inputs
+- modularize code and create folder hierarchy
+- use hooks for deletes
+- search via tags and metadata nodes
+- create folder hierarchy
