@@ -14,22 +14,20 @@ v0.2.0
 - [x] Discussions, Questions, Answers, and Polls share a schema
 
 v0.3.0
-- [ ] Passport integration
-- [ ] Metadata schema shared by discussion and comments
-- [x] Discussion may use a "threaded comment" style schema
-- [ ] Votes may be stored in bucket style schema (eg. 100 votes per document)
-- [x] Stars stored in ref array on User and count is denormalized on discussion
+- [x] Shared metadata schema for question, answer and comments
+- [x] Metadata schema is threaded
+- [x] Votes stored in own collection for quick read access and count is denormalized in metadata
+- [x] Stars stored in ref array on User and count is denormalized in metadata
 
 v1.0.0
+- [ ] Passport integration
 - [ ] React frontend
 
 Misc
-- optimize schemas and handlers
-- lock revote after some time
+- eventual consistency for votes and stars (update ui immediately)
+- lock revote after some time and archive post
 - use ES6 promises with Mongoose
-- upgrade to Koa
 - validate and sanitize schema inputs
 - modularize code and create folder hierarchy
-- use hooks for deletes
-- search via tags and metadata nodes
-- create folder hierarchy
+- [x] use hooks for deletes
+- search via tags and metadata
