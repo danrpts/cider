@@ -14,10 +14,11 @@ v0.2.0
 - [x] Discussions, Questions, Answers, and Polls share a schema
 
 v0.3.0
-- [x] Shared metadata schema for question, answer and comments
-- [x] Metadata schema is threaded
-- [x] Votes stored in own collection for quick read access and count is denormalized in metadata
-- [x] Stars stored in ref array on User and count is denormalized in metadata
+- [x] Support for only threaded style discussion
+- [x] Removed support for polling in favor of threads
+- [x] Shared metadata schema between questions, answers and comments
+- [x] Votes stored in collection to favor read access w/ denormalized count
+- [x] Stars stored in ref array on User w/ denormalized count
 
 v1.0.0
 - [ ] Passport integration
